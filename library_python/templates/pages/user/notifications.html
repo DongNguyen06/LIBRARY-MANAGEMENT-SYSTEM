@@ -1,0 +1,208 @@
+{% extends "layout.html" %}
+
+{% block title %}Notifications - City Library{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Notifications</h1>
+        <button id="markAllReadBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <i class="fas fa-check-double"></i> Mark All as Read
+        </button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm">
+        <!-- Notifications List -->
+        <div id="notificationsList" class="divide-y divide-gray-200">
+            <div class="p-8 text-center">
+                <i class="fas fa-spinner fa-spin text-4xl text-gray-400 mb-4"></i>
+                <p class="text-gray-600">Loading notifications...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // SocketIO connection for real-time notifications
+    const socket = io();
+
+    socket.on('connect', () => {
+        console.log('✅ Connected for real-time notifications');
+    });
+
+    // Listen for new notifications
+    socket.on('new_notification', (notification) => {
+        console.log('🔔 New notification received:', notification);
+        loadNotifications();
+        showNotificationToast(notification);
+    });
+
+    // Load notifications
+    async function loadNotifications() {
+        try {
+            const response = await fetch('/api/notifications');
+            const data = await response.json();
+            
+            const list = document.getElementById('notificationsList');
+            
+            if (data.success && data.notifications.length > 0) {
+                list.innerHTML = data.notifications.map(notif => {
+                    const typeIcons = {
+                        'info': 'fa-info-circle text-blue-500',
+                        'warning': 'fa-exclamation-triangle text-yellow-500',
+                        'success': 'fa-check-circle text-green-500',
+                        'urgent': 'fa-bell text-red-500'
+                    };
+                    
+                    const icon = typeIcons[notif.type] || typeIcons['info'];
+                    
+                    return `
+                        <div class="p-4 hover:bg-gray-50 ${notif.is_read ? 'bg-white' : 'bg-blue-50'}" data-notif-id="${notif.id}">
+                            <div class="flex items-start gap-4">
+                                <div class="flex-shrink-0">
+                                    <i class="fas ${icon} text-2xl"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="font-semibold text-gray-900 ${notif.is_read ? '' : 'font-bold'}">${escapeHtml(notif.title)}</h3>
+                                    <p class="text-gray-700 mt-1">${escapeHtml(notif.message)}</p>
+                                    <p class="text-sm text-gray-500 mt-2">${formatTime(notif.date)}</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    ${!notif.is_read ? `
+                                        <button onclick="markAsRead('${notif.id}')" class="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                                            <i class="fas fa-check"></i> Mark Read
+                                        </button>
+                                    ` : ''}
+                                    <button onclick="deleteNotification('${notif.id}')" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                list.innerHTML = `
+                    <div class="p-8 text-center">
+                        <i class="fas fa-bell text-6xl text-gray-300 mb-4"></i>
+                        <h3 class="text-xl font-semibold text-gray-900 mb-2">No notifications</h3>
+                        <p class="text-gray-600">You're all caught up!</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Failed to load notifications:', error);
+        }
+    }
+
+    // Mark as read
+    async function markAsRead(notificationId) {
+        try {
+            const response = await fetch(`/api/notifications/${notificationId}/read`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                loadNotifications();
+            }
+        } catch (error) {
+            console.error('Failed to mark as read:', error);
+        }
+    }
+
+    // Mark all as read
+    document.getElementById('markAllReadBtn').addEventListener('click', async () => {
+        try {
+            const response = await fetch('/api/notifications/read-all', {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                loadNotifications();
+            }
+        } catch (error) {
+            console.error('Failed to mark all as read:', error);
+        }
+    });
+
+    // Delete notification
+    async function deleteNotification(notificationId) {
+        if (!confirm('Are you sure you want to delete this notification?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/notifications/${notificationId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                loadNotifications();
+            }
+        } catch (error) {
+            console.error('Failed to delete notification:', error);
+        }
+    }
+
+    // Show toast notification
+    function showNotificationToast(notification) {
+        // You can integrate with a toast library or create a simple toast
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-white border-l-4 border-blue-500 shadow-lg rounded-lg p-4 max-w-md z-50 animate-fade-in';
+        toast.innerHTML = `
+            <div class="flex items-start gap-3">
+                <i class="fas fa-bell text-blue-500 text-xl"></i>
+                <div>
+                    <h4 class="font-semibold text-gray-900">${escapeHtml(notification.title)}</h4>
+                    <p class="text-sm text-gray-600 mt-1">${escapeHtml(notification.message)}</p>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.remove();
+        }, 5000);
+    }
+
+    // Utility functions
+    function formatTime(timestamp) {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+        if (diffMins < 10080) return `${Math.floor(diffMins / 1440)}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Initialize
+    loadNotifications();
+    
+    // Refresh every 30 seconds
+    setInterval(loadNotifications, 30000);
+</script>
+
+<style>
+    @keyframes fade-in {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+        animation: fade-in 0.3s ease-out;
+    }
+</style>
+{% endblock %}

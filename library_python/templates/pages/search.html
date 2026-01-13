@@ -1,0 +1,102 @@
+{% extends "layout.html" %}
+
+{% block title %}Search Books - City Library{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">Browse Our Collection</h1>
+
+    <!-- Search and Filter -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+        <form method="GET" action="{{ url_for('search') }}" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                    <input
+                        type="text"
+                        name="q"
+                        value="{{ query }}"
+                        placeholder="Enter title, author, or keyword..."
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Search By</label>
+                    <select name="searchBy" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="title" {% if search_by == 'title' %}selected{% endif %}>Title</option>
+                        <option value="author" {% if search_by == 'author' %}selected{% endif %}>Author</option>
+                        <option value="category" {% if search_by == 'category' %}selected{% endif %}>Category</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+                    <select name="sort" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="title" {% if sort_by == 'title' %}selected{% endif %}>Title (A-Z)</option>
+                        <option value="author" {% if sort_by == 'author' %}selected{% endif %}>Author</option>
+                        <option value="year" {% if sort_by == 'year' %}selected{% endif %}>Year</option>
+                        <option value="rating" {% if sort_by == 'rating' %}selected{% endif %}>Rating</option>
+                        <option value="popular" {% if sort_by == 'popular' %}selected{% endif %}>Most Borrowed</option>
+                        <option value="new" {% if sort_by == 'new' %}selected{% endif %}>Newest</option>
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select name="category" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {% if selected_category == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold">
+                <i class="fas fa-search mr-2"></i> Search
+            </button>
+        </form>
+    </div>
+
+    <!-- Results -->
+    <div class="mb-4">
+        <p class="text-gray-600">
+            Found <span class="font-semibold">{{ books|length }}</span> book(s)
+            {% if query %}for "<span class="font-semibold">{{ query }}</span>"{% endif %}
+        </p>
+    </div>
+
+    {% if books %}
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+        {% for book in books %}
+        <div class="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
+            <a href="{{ url_for('book_detail', book_id=book.id) }}">
+                <img src="{{ book.cover_url }}" alt="{{ book.title }}" class="w-full h-64 object-cover rounded-t-lg">
+                <div class="p-4">
+                    <h3 class="font-semibold text-gray-900 mb-1 line-clamp-2">{{ book.title }}</h3>
+                    <p class="text-sm text-gray-600 mb-2">{{ book.author }}</p>
+                    <p class="text-xs text-gray-500 mb-2">{{ book.category }}</p>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-1 text-yellow-500">
+                            <i class="fas fa-star text-sm"></i>
+                            <span class="text-sm text-gray-700">{{ book.rating }}</span>
+                        </div>
+                        <span class="text-xs px-2 py-1 rounded {% if book.available_copies > 0 %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                            {{ book.available_copies }} available
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-white rounded-lg shadow-sm p-12 text-center">
+        <i class="fas fa-search text-6xl text-gray-300 mb-4"></i>
+        <h3 class="text-xl font-semibold text-gray-900 mb-2">No books found</h3>
+        <p class="text-gray-600">Try adjusting your search criteria</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

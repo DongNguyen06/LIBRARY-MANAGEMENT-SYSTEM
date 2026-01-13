@@ -1,0 +1,354 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin Dashboard - City Library{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+        <div class="flex gap-3">
+            <a href="{{ url_for('staff_dashboard') }}" class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2">
+                <i class="fas fa-user-tie"></i>
+                <span>Staff Functions</span>
+            </a>
+            <a href="{{ url_for('admin_send_notifications') }}" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                <i class="fas fa-bell"></i>
+                <span>Send Notifications</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistics Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-users text-blue-600 text-3xl"></i>
+                <span class="text-3xl font-bold text-gray-900">{{ stats.total_users }}</span>
+            </div>
+            <p class="text-gray-600 text-sm">Total Users</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-book text-green-600 text-3xl"></i>
+                <span class="text-3xl font-bold text-gray-900">{{ stats.total_books }}</span>
+            </div>
+            <p class="text-gray-600 text-sm">Total Books</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-chart-line text-purple-600 text-3xl"></i>
+                <span class="text-3xl font-bold text-gray-900">{{ stats.active_borrows }}</span>
+            </div>
+            <p class="text-gray-600 text-sm">Active Borrows</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-dollar-sign text-yellow-600 text-3xl"></i>
+                <span class="text-3xl font-bold text-gray-900">${{ "%.0f"|format(stats.revenue) }}</span>
+            </div>
+            <p class="text-gray-600 text-sm">Revenue (Fines)</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-user-tie text-red-600 text-3xl"></i>
+                <span class="text-3xl font-bold text-gray-900">{{ stats.total_staff }}</span>
+            </div>
+            <p class="text-gray-600 text-sm">Staff Members</p>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="bg-white rounded-lg shadow-sm mb-6">
+        <div class="border-b border-gray-200">
+            <div class="flex">
+                <button onclick="switchTab('overview')" id="tab-overview" 
+                    class="tab-button px-6 py-3 border-b-2 border-blue-600 text-blue-600 font-medium">
+                    <i class="fas fa-chart-bar mr-2"></i>Overview
+                </button>
+                <button onclick="switchTab('config')" id="tab-config" 
+                    class="tab-button px-6 py-3 border-b-2 border-transparent text-gray-600 hover:text-gray-900">
+                    <i class="fas fa-cog mr-2"></i>Configuration
+                </button>
+                <button onclick="switchTab('logs')" id="tab-logs" 
+                    class="tab-button px-6 py-3 border-b-2 border-transparent text-gray-600 hover:text-gray-900">
+                    <i class="fas fa-database mr-2"></i>System Logs
+                </button>
+            </div>
+        </div>
+
+        <!-- Tab Contents -->
+        <div class="p-6">
+            <!-- Overview Tab -->
+            <div id="content-overview" class="tab-content">
+                <div class="space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 mb-4">System Analytics</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Borrowing Trends -->
+                            <div class="border border-gray-200 rounded-lg p-6">
+                                <h3 class="font-semibold text-gray-900 mb-4">Borrowing Trends (Last 30 Days)</h3>
+                                <div class="space-y-3">
+                                    {% for trend in trends %}
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-gray-600">{{ trend.week }}</span>
+                                        <div class="flex-1 mx-4 bg-gray-200 rounded-full h-2">
+                                            <div class="bg-blue-600 h-2 rounded-full" 
+                                                 style="width: {{ (trend.count / 60 * 100)|int }}%"></div>
+                                        </div>
+                                        <span class="text-sm font-medium text-gray-900">{{ trend.count }}</span>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <!-- Popular Categories -->
+                            <div class="border border-gray-200 rounded-lg p-6">
+                                <h3 class="font-semibold text-gray-900 mb-4">Popular Categories</h3>
+                                <div class="space-y-3">
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-sm text-gray-700">Fantasy</span>
+                                            <span class="text-sm font-medium text-gray-900">35%</span>
+                                        </div>
+                                        <div class="bg-gray-200 rounded-full h-2">
+                                            <div class="bg-purple-600 h-2 rounded-full" style="width: 35%"></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-sm text-gray-700">Classic Literature</span>
+                                            <span class="text-sm font-medium text-gray-900">28%</span>
+                                        </div>
+                                        <div class="bg-gray-200 rounded-full h-2">
+                                            <div class="bg-blue-600 h-2 rounded-full" style="width: 28%"></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-sm text-gray-700">Science Fiction</span>
+                                            <span class="text-sm font-medium text-gray-900">22%</span>
+                                        </div>
+                                        <div class="bg-gray-200 rounded-full h-2">
+                                            <div class="bg-green-600 h-2 rounded-full" style="width: 22%"></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <span class="text-sm text-gray-700">Mystery</span>
+                                            <span class="text-sm font-medium text-gray-900">15%</span>
+                                        </div>
+                                        <div class="bg-gray-200 rounded-full h-2">
+                                            <div class="bg-yellow-600 h-2 rounded-full" style="width: 15%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent System Events -->
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 mb-4">Recent System Events</h2>
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                                <i class="fas fa-calendar text-blue-600"></i>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-900">New user registered</p>
+                                    <p class="text-xs text-gray-500">2 hours ago</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                                <i class="fas fa-book text-green-600"></i>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-900">100 new books loaded into catalog</p>
+                                    <p class="text-xs text-gray-500">5 hours ago</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
+                                <i class="fas fa-cog text-purple-600"></i>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-900">System configuration updated</p>
+                                    <p class="text-xs text-gray-500">1 day ago</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Tab -->
+            <div id="content-config" class="tab-content hidden">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">System Configuration</h2>
+                
+                <form action="{{ url_for('admin_save_config') }}" method="POST">
+                    <div class="space-y-6">
+                        <div>
+                            <h3 class="font-semibold text-gray-900 mb-3">Borrowing Rules</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                                        Maximum Borrowed Books per User
+                                    </label>
+                                    <input type="number" name="max_borrowed_books" 
+                                           value="{{ config.max_borrowed_books }}" min="1" max="10"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                                        Borrow Duration (days)
+                                    </label>
+                                    <input type="number" name="borrow_duration" 
+                                           value="{{ config.borrow_duration }}" min="1" max="90"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                                        Reservation Hold Time (days)
+                                    </label>
+                                    <input type="number" name="reservation_hold_time" 
+                                           value="{{ config.reservation_hold_time }}" min="1" max="14"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                                        Late Fee per Day ($)
+                                    </label>
+                                    <input type="number" step="0.01" name="late_fee_per_day" 
+                                           value="{{ config.late_fee_per_day }}" min="0" max="10"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                                        Renewal Limit
+                                    </label>
+                                    <input type="number" name="renewal_limit" 
+                                           value="{{ config.renewal_limit }}" min="0" max="5"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" 
+                                class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                            <i class="fas fa-save mr-2"></i>Save Configuration
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- System Logs Tab -->
+            <div id="content-logs" class="tab-content hidden">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">System Activity Logs</h2>
+                
+                <div class="space-y-2 mb-6 max-h-[600px] overflow-y-auto">
+                    {% if logs %}
+                        {% for log in logs %}
+                        <div class="flex items-start gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+                            <!-- Icon -->
+                            <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center
+                                {% if log.log_type == 'admin' %}bg-purple-100
+                                {% elif log.log_type == 'warning' %}bg-yellow-100
+                                {% elif log.log_type == 'error' %}bg-red-100
+                                {% else %}bg-blue-100{% endif %}">
+                                <i class="fas 
+                                    {% if 'Login' in log.action %}fa-sign-in-alt
+                                    {% elif 'Logout' in log.action %}fa-sign-out-alt
+                                    {% elif 'Registration' in log.action %}fa-user-plus
+                                    {% elif 'Borrow' in log.action %}fa-book
+                                    {% elif 'Return' in log.action %}fa-undo
+                                    {% elif 'Configuration' in log.action %}fa-cog
+                                    {% elif 'Notification' in log.action %}fa-bell
+                                    {% elif 'Failed' in log.action %}fa-exclamation-triangle
+                                    {% else %}fa-info-circle{% endif %}
+                                    {% if log.log_type == 'admin' %}text-purple-600
+                                    {% elif log.log_type == 'warning' %}text-yellow-600
+                                    {% elif log.log_type == 'error' %}text-red-600
+                                    {% else %}text-blue-600{% endif %}">
+                                </i>
+                            </div>
+                            
+                            <!-- Content -->
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="flex-1">
+                                        <h4 class="font-semibold text-gray-900 mb-1">{{ log.action }}</h4>
+                                        <p class="text-sm text-gray-600">{{ log.details }}</p>
+                                        {% if log.user_id %}
+                                        <p class="text-xs text-gray-500 mt-1">
+                                            <i class="fas fa-user text-xs"></i> User ID: {{ log.user_id }}
+                                        </p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-shrink-0 text-right">
+                                        <span class="text-xs px-2 py-1 rounded font-medium
+                                            {% if log.log_type == 'admin' %}bg-purple-100 text-purple-700
+                                            {% elif log.log_type == 'warning' %}bg-yellow-100 text-yellow-700
+                                            {% elif log.log_type == 'error' %}bg-red-100 text-red-700
+                                            {% else %}bg-blue-100 text-blue-700{% endif %}">
+                                            {{ log.log_type }}
+                                        </span>
+                                        <p class="text-xs text-gray-500 mt-2">{{ log.timestamp }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-12">
+                            <i class="fas fa-clipboard-list text-6xl text-gray-300 mb-4"></i>
+                            <p class="text-gray-600">No system logs available</p>
+                            <p class="text-sm text-gray-500 mt-2">System logs will appear here as activities occur</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <div class="flex gap-3">
+                    <a href="{{ url_for('admin_export_logs') }}" 
+                       class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                        <i class="fas fa-download mr-2"></i>Export Logs
+                    </a>
+                    <form action="{{ url_for('admin_clear_logs') }}" method="POST" class="inline"
+                          onsubmit="return confirm('Are you sure you want to clear old logs?')">
+                        <input type="hidden" name="days" value="30">
+                        <button type="submit" 
+                                class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
+                            <i class="fas fa-trash mr-2"></i>Clear Old Logs (30+ days)
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function switchTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    // Remove active state from all tabs
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('border-blue-600', 'text-blue-600');
+        button.classList.add('border-transparent', 'text-gray-600');
+    });
+    
+    // Show selected tab content
+    document.getElementById('content-' + tabName).classList.remove('hidden');
+    
+    // Add active state to selected tab
+    const activeTab = document.getElementById('tab-' + tabName);
+    activeTab.classList.remove('border-transparent', 'text-gray-600');
+    activeTab.classList.add('border-blue-600', 'text-blue-600');
+}
+</script>
+{% endblock %}

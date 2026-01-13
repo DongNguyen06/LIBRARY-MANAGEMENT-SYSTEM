@@ -1,0 +1,261 @@
+{% extends "layout.html" %}
+
+{% block title %}Send Notifications - Staff{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Send Notifications</h1>
+        <p class="text-gray-600 mt-2">Send notifications to library users</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Send Notification Form -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">Create Notification</h2>
+                
+                <form id="notificationForm" class="space-y-4">
+                    <!-- Title -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                        <input
+                            type="text"
+                            id="notifTitle"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Notification title"
+                            required
+                        />
+                    </div>
+
+                    <!-- Message -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                        <textarea
+                            id="notifMessage"
+                            rows="5"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Notification message"
+                            required
+                        ></textarea>
+                    </div>
+
+                    <!-- Type -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                        <select
+                            id="notifType"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="info">Info</option>
+                            <option value="warning">Warning</option>
+                            <option value="success">Success</option>
+                            <option value="urgent">Urgent</option>
+                        </select>
+                    </div>
+
+                    <!-- Target -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Send To</label>
+                        <select
+                            id="notifTarget"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="all">All Users</option>
+                            <option value="specific">Specific Users</option>
+                        </select>
+                    </div>
+
+                    <!-- User Selection (hidden by default) -->
+                    <div id="userSelectionDiv" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Users</label>
+                        <div id="userList" class="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto">
+                            <p class="text-gray-600 text-center">Loading users...</p>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="flex gap-3">
+                        <button
+                            type="submit"
+                            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                            <i class="fas fa-paper-plane"></i> Send Notification
+                        </button>
+                        <button
+                            type="button"
+                            onclick="document.getElementById('notificationForm').reset()"
+                            class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                        >
+                            <i class="fas fa-redo"></i> Reset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Quick Actions & Stats -->
+        <div class="space-y-6">
+            <!-- Stats -->
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Statistics</h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600">Total Users</span>
+                        <span id="totalUsers" class="font-semibold text-gray-900">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Templates -->
+            <div class="bg-white rounded-lg shadow-sm p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Templates</h3>
+                <div class="space-y-2">
+                    <button
+                        onclick="useTemplate('overdue', 'Overdue Book Reminder', 'Please return your overdue books to avoid late fees.', 'warning')"
+                        class="w-full text-left px-4 py-2 bg-yellow-50 hover:bg-yellow-100 rounded-lg border border-yellow-200"
+                    >
+                        <i class="fas fa-exclamation-triangle text-yellow-600"></i>
+                        <span class="ml-2 text-sm font-medium">Overdue Reminder</span>
+                    </button>
+                    <button
+                        onclick="useTemplate('maintenance', 'System Maintenance', 'The library system will undergo maintenance on [DATE].', 'info')"
+                        class="w-full text-left px-4 py-2 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200"
+                    >
+                        <i class="fas fa-wrench text-blue-600"></i>
+                        <span class="ml-2 text-sm font-medium">Maintenance Notice</span>
+                    </button>
+                    <button
+                        onclick="useTemplate('event', 'Library Event', 'Join us for our upcoming library event!', 'success')"
+                        class="w-full text-left px-4 py-2 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200"
+                    >
+                        <i class="fas fa-calendar text-green-600"></i>
+                        <span class="ml-2 text-sm font-medium">Event Announcement</span>
+                    </button>
+                    <button
+                        onclick="useTemplate('urgent', 'Urgent: Account Issue', 'Please contact the library staff immediately regarding your account.', 'urgent')"
+                        class="w-full text-left px-4 py-2 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200"
+                    >
+                        <i class="fas fa-bell text-red-600"></i>
+                        <span class="ml-2 text-sm font-medium">Urgent Notice</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedUserIds = [];
+
+    // Toggle user selection based on target
+    document.getElementById('notifTarget').addEventListener('change', function() {
+        const userDiv = document.getElementById('userSelectionDiv');
+        if (this.value === 'specific') {
+            userDiv.classList.remove('hidden');
+            loadUsers();
+        } else {
+            userDiv.classList.add('hidden');
+        }
+    });
+
+    // Load users
+    async function loadUsers() {
+        try {
+            const response = await fetch('/api/users');
+            const data = await response.json();
+            
+            const userList = document.getElementById('userList');
+            if (data.success && data.users) {
+                const regularUsers = data.users.filter(u => u.role === 'user');
+                
+                userList.innerHTML = regularUsers.map(user => `
+                    <label class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer">
+                        <input
+                            type="checkbox"
+                            value="${user.id}"
+                            class="user-checkbox mr-3"
+                            onchange="toggleUser('${user.id}')"
+                        />
+                        <div>
+                            <div class="font-medium text-gray-900">${user.name}</div>
+                            <div class="text-sm text-gray-600">${user.email}</div>
+                        </div>
+                    </label>
+                `).join('');
+                
+                document.getElementById('totalUsers').textContent = regularUsers.length;
+            }
+        } catch (error) {
+            console.error('Failed to load users:', error);
+        }
+    }
+
+    // Toggle user selection
+    function toggleUser(userId) {
+        const index = selectedUserIds.indexOf(userId);
+        if (index > -1) {
+            selectedUserIds.splice(index, 1);
+        } else {
+            selectedUserIds.push(userId);
+        }
+    }
+
+    // Use template
+    function useTemplate(type, title, message, notifType) {
+        document.getElementById('notifTitle').value = title;
+        document.getElementById('notifMessage').value = message;
+        document.getElementById('notifType').value = notifType;
+    }
+
+    // Send notification
+    document.getElementById('notificationForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const title = document.getElementById('notifTitle').value;
+        const message = document.getElementById('notifMessage').value;
+        const type = document.getElementById('notifType').value;
+        const target = document.getElementById('notifTarget').value;
+        
+        if (target === 'specific' && selectedUserIds.length === 0) {
+            alert('Please select at least one user');
+            return;
+        }
+        
+        const data = {
+            title,
+            message,
+            type,
+            target,
+            user_ids: target === 'specific' ? selectedUserIds : []
+        };
+        
+        try {
+            const response = await fetch('/api/notifications/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                alert('✅ ' + result.message);
+                this.reset();
+                selectedUserIds = [];
+                document.getElementById('userSelectionDiv').classList.add('hidden');
+            } else {
+                alert('❌ ' + result.message);
+            }
+        } catch (error) {
+            console.error('Error sending notification:', error);
+            alert('Failed to send notification');
+        }
+    });
+
+    // Load initial stats
+    loadUsers();
+</script>
+{% endblock %}

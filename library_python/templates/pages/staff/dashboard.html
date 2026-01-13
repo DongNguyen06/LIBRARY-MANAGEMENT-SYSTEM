@@ -1,0 +1,607 @@
+{% extends "layout.html" %}
+
+{% block title %}Staff Dashboard - City Library{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Staff Dashboard</h1>
+        <a href="{{ url_for('staff_send_notifications') }}" class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+            <i class="fas fa-bell"></i>
+            <span>Send Notifications</span>
+        </a>
+    </div>
+
+    <!-- Statistics Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-book-open text-4xl text-blue-600"></i>
+                <span class="text-3xl font-bold text-gray-900">{{ stats.borrowed }}</span>
+            </div>
+            <p class="text-gray-600">Currently Borrowed</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-exclamation-circle text-4xl text-red-600"></i>
+                <span class="text-3xl font-bold text-gray-900">{{ stats.overdue }}</span>
+            </div>
+            <p class="text-gray-600">Overdue Books</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-dollar-sign text-4xl text-green-600"></i>
+                <span class="text-3xl font-bold text-gray-900">${{ "%.2f"|format(stats.fines) }}</span>
+            </div>
+            <p class="text-gray-600">Total Fines</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm p-6">
+            <div class="flex items-center justify-between mb-2">
+                <i class="fas fa-users text-4xl text-purple-600"></i>
+                <span class="text-3xl font-bold text-gray-900">{{ stats.members }}</span>
+            </div>
+            <p class="text-gray-600">Active Members</p>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="bg-white rounded-lg shadow-sm mb-6">
+        <div class="border-b border-gray-200">
+            <div class="flex overflow-x-auto">
+                <button onclick="showTab('overview')" id="tab-overview" class="tab-button px-6 py-3 border-b-2 border-blue-600 text-blue-600 whitespace-nowrap">
+                    <i class="fas fa-chart-line mr-2"></i>Overview
+                </button>
+                <button onclick="showTab('borrow')" id="tab-borrow" class="tab-button px-6 py-3 border-b-2 border-transparent text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <i class="fas fa-hand-holding-heart mr-2"></i>Process Borrow
+                </button>
+                <button onclick="showTab('reservations')" id="tab-reservations" class="tab-button px-6 py-3 border-b-2 border-transparent text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <i class="fas fa-bookmark mr-2"></i>Reservations
+                </button>
+                <button onclick="showTab('return')" id="tab-return" class="tab-button px-6 py-3 border-b-2 border-transparent text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <i class="fas fa-undo mr-2"></i>Process Return
+                </button>
+                <button onclick="showTab('books')" id="tab-books" class="tab-button px-6 py-3 border-b-2 border-transparent text-gray-600 hover:text-gray-900 whitespace-nowrap">
+                    <i class="fas fa-book mr-2"></i>Book Management
+                </button>
+            </div>
+        </div>
+
+        <div class="p-6">
+            <!-- Overview Tab -->
+            <div id="content-overview" class="tab-content">
+                <div class="space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 mb-4">Pending Requests</h2>
+                        <p class="text-sm text-gray-600 mb-3">These requests are awaiting pickup. Process them in the "Process Borrow" tab.</p>
+                        {% if pending_borrows %}
+                        <div class="space-y-2">
+                            {% for borrow in pending_borrows[:5] %}
+                            {% set book = borrow.get_book() %}
+                            {% set user = borrow.get_user() %}
+                            <div class="flex items-center gap-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <i class="fas fa-clock text-xl text-yellow-600"></i>
+                                <div class="flex-1">
+                                    <p class="text-gray-900"><strong>{{ user.name }}</strong> wants to borrow <strong>{{ book.title }}</strong></p>
+                                    <p class="text-sm text-gray-600">Requested: {{ borrow.borrow_date }}</p>
+                                    {% if borrow.pending_until %}
+                                    <p class="text-xs text-amber-600 mt-1"><i class="fas fa-hourglass-half"></i> Pickup by: {{ borrow.pending_until }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-gray-600">No pending requests</p>
+                        {% endif %}
+                    </div>
+
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900 mb-4">Overdue Alert</h2>
+                        {% if overdue_books %}
+                        <div class="space-y-2">
+                            {% for borrow in overdue_books[:5] %}
+                            {% set book = borrow.get_book() %}
+                            {% set user = borrow.get_user() %}
+                            <div class="flex items-center gap-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                                <i class="fas fa-exclamation-triangle text-xl text-red-600"></i>
+                                <div class="flex-1">
+                                    <p class="text-gray-900"><strong>{{ book.title }}</strong> is {{ borrow.get_overdue_days() }} days overdue</p>
+                                    <p class="text-sm text-gray-600">User: {{ user.name }} | Fine: ${{ "%.2f"|format(borrow.get_fine_amount()) }}</p>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-gray-600">No overdue books</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Borrow Tab -->
+            <div id="content-borrow" class="tab-content hidden">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Process Book Borrowing</h2>
+                <p class="text-sm text-gray-600 mb-6">Approve or reject pending pickup requests when users arrive at the library.</p>
+                
+                <!-- Search by User Name -->
+                <div class="mb-6 max-w-2xl">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-search mr-2"></i>Search by User Name
+                    </label>
+                    <input type="text" id="user_search_input" placeholder="Enter user name to filter..." 
+                           class="w-full px-4 py-2 border rounded-lg" onkeyup="filterPendingRequests()" />
+                </div>
+
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 max-w-2xl">
+                    <h3 class="font-semibold text-gray-900 mb-2"><i class="fas fa-info-circle mr-2"></i>Borrowing Policy</h3>
+                    <div class="space-y-1 text-sm text-gray-700">
+                        <p><i class="fas fa-calendar mr-2"></i><strong>Duration:</strong> 7 days from pickup</p>
+                        <p><i class="fas fa-redo mr-2"></i><strong>Renewal:</strong> 1 time (extend 7 more days)</p>
+                        <p><i class="fas fa-clock mr-2"></i><strong>Late Fee:</strong> 2,000 VND/hour (<24h) or 10,000 VND/day (≥24h)</p>
+                        <p><i class="fas fa-hourglass mr-2"></i><strong>Grace Period:</strong> 30 minutes free</p>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Pending Pickup Requests</h3>
+                    {% if pending_borrows %}
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Book</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ISBN</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Requested</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pickup Deadline</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y" id="pending_requests_tbody">
+                                {% for borrow in pending_borrows %}
+                                {% set book = borrow.get_book() %}
+                                {% set user = borrow.get_user() %}
+                                <tr class="pending-request-row" data-user-name="{{ user.name.lower() }}">
+                                    <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ user.name }}</td>
+                                    <td class="px-4 py-3 text-sm">{{ book.title }}</td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-600">{{ book.isbn }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">{{ borrow.borrow_date }}</td>
+                                    <td class="px-4 py-3 text-sm">
+                                        {% if borrow.pending_until %}
+                                        <span class="text-amber-600 font-medium">{{ borrow.pending_until }}</span>
+                                        {% else %}
+                                        <span class="text-gray-400">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <form method="POST" action="{{ url_for('staff_approve_borrow', borrow_id=borrow.id) }}" class="inline">
+                                            <button type="submit" class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm mr-2">
+                                                <i class="fas fa-check"></i> Approve
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ url_for('staff_reject_borrow', borrow_id=borrow.id) }}" class="inline">
+                                            <button type="submit" class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm">
+                                                <i class="fas fa-times"></i> Reject
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-gray-600">No pending pickup requests</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Reservations Tab -->
+            <div id="content-reservations" class="tab-content hidden">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Book Reservations</h2>
+                <p class="text-sm text-gray-600 mb-6">Track users waiting for out-of-stock books. They will be notified when books become available.</p>
+                
+                {% if all_reservations %}
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Position</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Book</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reserved Date</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hold Until</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            {% for reservation in all_reservations %}
+                            {% set book = reservation.get_book() %}
+                            {% set user = reservation.get_user() %}
+                            <tr>
+                                <td class="px-4 py-3 text-sm">
+                                    <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded font-semibold">#{{ reservation.queue_position }}</span>
+                                </td>
+                                <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ user.name }}</td>
+                                <td class="px-4 py-3 text-sm">{{ book.title }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-600">{{ reservation.reservation_date }}</td>
+                                <td class="px-4 py-3 text-sm">
+                                    {% if reservation.status == 'waiting' %}
+                                    <span class="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                                        <i class="fas fa-clock"></i> Waiting
+                                    </span>
+                                    {% elif reservation.status == 'ready' %}
+                                    <span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+                                        <i class="fas fa-check"></i> Ready
+                                    </span>
+                                    {% elif reservation.status == 'expired' %}
+                                    <span class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
+                                        <i class="fas fa-times"></i> Expired
+                                    </span>
+                                    {% elif reservation.status == 'cancelled' %}
+                                    <span class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                                        <i class="fas fa-ban"></i> Cancelled
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    {% if reservation.hold_until %}
+                                    <span class="text-amber-600 font-medium">{{ reservation.hold_until }}</span>
+                                    {% else %}
+                                    <span class="text-gray-400">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-bookmark text-6xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-600">No active reservations</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Return Tab -->
+            <div id="content-return" class="tab-content hidden">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Process Book Return</h2>
+                
+                <form method="POST" action="{{ url_for('staff_process_return') }}" class="space-y-4 max-w-2xl">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Book ISBN or Borrow ID</label>
+                        <input type="text" name="identifier" placeholder="Scan ISBN or enter ID..." class="w-full px-4 py-2 border rounded-lg" required />
+                    </div>
+
+                    <div class="bg-gray-50 border rounded-lg p-4">
+                        <h3 class="font-semibold text-gray-900 mb-3">Book Condition Assessment</h3>
+                        
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Condition</label>
+                        <select name="condition" id="condition-select" class="w-full px-4 py-2 border rounded-lg mb-3" onchange="updateFeeEstimate()">
+                            <option value="good">✓ Good Condition (No damage)</option>
+                            <option value="minor_damage">⚠ Minor Damage (20% of book value)</option>
+                            <option value="major_damage">⚠⚠ Major Damage (100% + 15,000 VND processing)</option>
+                            <option value="lost">✗ Lost (100% + 20,000 VND re-stocking)</option>
+                        </select>
+
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Book Value (VND)</label>
+                        <input type="number" name="book_value" id="book-value-input" placeholder="Enter book's original value..." 
+                               class="w-full px-4 py-2 border rounded-lg" min="0" step="1000" value="0" onchange="updateFeeEstimate()" />
+                        
+                        <div id="fee-estimate" class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-sm hidden">
+                            <p class="font-medium text-gray-900">Estimated Damage Fee: <span id="damage-fee-amount">0</span> VND</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <h3 class="font-semibold text-gray-900 mb-2">Fee Calculation Info</h3>
+                        <div class="space-y-1 text-sm text-gray-700">
+                            <p>• <strong>Late Fee:</strong> 30 min grace → 2,000/hour (< 24h) → 10,000/day (≥ 24h)</p>
+                            <p>• <strong>Minor Damage:</strong> 20% of book value</p>
+                            <p>• <strong>Major Damage:</strong> 100% + 15,000 processing fee</p>
+                            <p>• <strong>Lost:</strong> 100% + 20,000 re-stocking fee</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <label class="flex items-center gap-3">
+                            <input type="checkbox" name="fine_paid" class="w-5 h-5 rounded" />
+                            <div>
+                                <span class="text-gray-900 block font-medium">Fine paid</span>
+                                <span class="text-sm text-gray-600">Check if user has paid all fines (late + damage)</span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+                        <i class="fas fa-check-double mr-2"></i>Confirm Return
+                    </button>
+                </form>
+
+                <script>
+                function updateFeeEstimate() {
+                    const condition = document.getElementById('condition-select').value;
+                    const bookValue = parseFloat(document.getElementById('book-value-input').value) || 0;
+                    const feeEstimateDiv = document.getElementById('fee-estimate');
+                    const feeAmountSpan = document.getElementById('damage-fee-amount');
+                    
+                    let damageFee = 0;
+                    
+                    if (condition === 'good') {
+                        feeEstimateDiv.classList.add('hidden');
+                        return;
+                    } else if (condition === 'minor_damage') {
+                        damageFee = bookValue * 0.20;
+                    } else if (condition === 'major_damage') {
+                        damageFee = bookValue + 15000;
+                    } else if (condition === 'lost') {
+                        damageFee = bookValue + 20000;
+                    }
+                    
+                    feeAmountSpan.textContent = damageFee.toLocaleString('vi-VN');
+                    feeEstimateDiv.classList.remove('hidden');
+                }
+                </script>
+
+                <div class="mt-8">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">
+                        <i class="fas fa-book-reader text-blue-600 mr-2"></i>Currently Borrowed Books
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">Books that are currently checked out and not yet returned.</p>
+                    {% if borrowed_books %}
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Book</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ISBN</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Borrow Date</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                {% for borrow in borrowed_books %}
+                                {% set book = borrow.get_book() %}
+                                {% set user = borrow.get_user() %}
+                                <tr>
+                                    <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ user.name }}</td>
+                                    <td class="px-4 py-3 text-sm">{{ book.title }}</td>
+                                    <td class="px-4 py-3 text-sm font-mono text-gray-600">{{ book.isbn }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-600">{{ borrow.borrow_date }}</td>
+                                    <td class="px-4 py-3 text-sm">
+                                        {% if borrow.is_overdue() %}
+                                        <span class="text-red-600 font-semibold">{{ borrow.due_date }}</span>
+                                        {% else %}
+                                        <span class="text-gray-900">{{ borrow.due_date }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="px-4 py-3 text-sm">
+                                        {% if borrow.is_overdue() %}
+                                        <span class="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
+                                            <i class="fas fa-exclamation-triangle"></i> Overdue
+                                        </span>
+                                        {% else %}
+                                        <span class="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+                                            <i class="fas fa-check"></i> On Time
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-gray-600">No books currently borrowed</p>
+                    {% endif %}
+                </div>
+
+                <div class="mt-8">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">
+                        <i class="fas fa-exclamation-circle text-red-600 mr-2"></i>All Overdue Books
+                    </h3>
+                    {% if overdue_books %}
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Book</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Overdue</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fine</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                {% for borrow in overdue_books %}
+                                {% set book = borrow.get_book() %}
+                                {% set user = borrow.get_user() %}
+                                <tr>
+                                    <td class="px-4 py-3 text-sm">{{ user.name }}</td>
+                                    <td class="px-4 py-3 text-sm">{{ book.title }}</td>
+                                    <td class="px-4 py-3 text-sm">{{ borrow.due_date }}</td>
+                                    <td class="px-4 py-3 text-sm text-red-600 font-semibold">{{ borrow.get_overdue_days() }} days</td>
+                                    <td class="px-4 py-3 text-sm text-red-600 font-semibold">${{ "%.2f"|format(borrow.get_fine_amount()) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-gray-600">No overdue books</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Books Tab -->
+            <div id="content-books" class="tab-content hidden">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-900">Book Management</h2>
+                </div>
+                
+                <div class="mb-4">
+                    <input type="text" id="book_search" placeholder="Search by title, author, or ISBN..." class="w-full px-4 py-2 border rounded-lg" onkeyup="filterBooks()" />
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cover</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Author</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ISBN</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Available</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            {% for book in all_books %}
+                            <tr class="book-row">
+                                <td class="px-4 py-3">
+                                    <img src="{{ book.cover_url }}" alt="{{ book.title }}" class="w-10 h-14 object-cover rounded" onerror="this.src='https://via.placeholder.com/40x56?text=No+Cover'">
+                                </td>
+                                <td class="px-4 py-3 text-sm book-title">{{ book.title }}</td>
+                                <td class="px-4 py-3 text-sm book-author">{{ book.author }}</td>
+                                <td class="px-4 py-3 text-sm book-isbn">{{ book.isbn }}</td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span class="px-2 py-1 bg-{% if book.available_copies > 0 %}green{% else %}red{% endif %}-100 text-{% if book.available_copies > 0 %}green{% else %}red{% endif %}-700 rounded">
+                                        {{ book.available_copies }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">{{ book.total_copies }}</td>
+                                <td class="px-4 py-3">
+                                    <div class="flex gap-2">
+                                        <a href="{{ url_for('book_detail', book_id=book.id) }}" class="text-blue-600 hover:text-blue-700 text-sm">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                        <button onclick="editBook('{{ book.id }}', '{{ book.title }}', '{{ book.author }}', '{{ book.description }}', {{ book.total_copies }}, {{ book.available_copies }})" class="text-green-600 hover:text-green-700 text-sm">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Book Modal -->
+<div id="editBookModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-900">Edit Book Information</h3>
+                <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            
+            <form id="editBookForm" method="POST" action="/staff/book/edit" class="space-y-4">
+                <input type="hidden" id="edit_book_id" name="book_id">
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                    <input type="text" id="edit_title" name="title" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Author</label>
+                    <input type="text" id="edit_author" name="author" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                    <textarea id="edit_description" name="description" rows="5" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Total Copies</label>
+                        <input type="number" id="edit_total_copies" name="total_copies" min="1" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Available Copies</label>
+                        <input type="number" id="edit_available_copies" name="available_copies" min="0" required class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                
+                <div class="flex gap-3 pt-4">
+                    <button type="submit" class="flex-1 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                        <i class="fas fa-save mr-2"></i>Save Changes
+                    </button>
+                    <button type="button" onclick="closeEditModal()" class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function showTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    document.querySelectorAll('.tab-button').forEach(b => {
+        b.classList.remove('border-blue-600', 'text-blue-600');
+        b.classList.add('border-transparent', 'text-gray-600');
+    });
+    document.getElementById('content-' + tabName).classList.remove('hidden');
+    const btn = document.getElementById('tab-' + tabName);
+    btn.classList.remove('border-transparent', 'text-gray-600');
+    btn.classList.add('border-blue-600', 'text-blue-600');
+}
+
+function filterPendingRequests() {
+    const search = document.getElementById('user_search_input').value.toLowerCase();
+    const rows = document.querySelectorAll('.pending-request-row');
+    rows.forEach(row => {
+        const userName = row.getAttribute('data-user-name');
+        row.style.display = userName.includes(search) ? '' : 'none';
+    });
+}
+
+function filterBooks() {
+    const search = document.getElementById('book_search').value.toLowerCase();
+    document.querySelectorAll('.book-row').forEach(row => {
+        const title = row.querySelector('.book-title').textContent.toLowerCase();
+        const author = row.querySelector('.book-author').textContent.toLowerCase();
+        const isbn = row.querySelector('.book-isbn').textContent.toLowerCase();
+        row.style.display = (title.includes(search) || author.includes(search) || isbn.includes(search)) ? '' : 'none';
+    });
+}
+
+function editBook(bookId, title, author, description, totalCopies, availableCopies) {
+    document.getElementById('edit_book_id').value = bookId;
+    document.getElementById('edit_title').value = title;
+    document.getElementById('edit_author').value = author;
+    document.getElementById('edit_description').value = description || '';
+    document.getElementById('edit_total_copies').value = totalCopies;
+    document.getElementById('edit_available_copies').value = availableCopies;
+    document.getElementById('editBookModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('editBookModal').classList.add('hidden');
+}
+
+// Close modal when clicking outside
+document.getElementById('editBookModal').addEventListener('click', function(e) {
+    if (e.target.id === 'editBookModal') {
+        closeEditModal();
+    }
+});
+</script>
+{% endblock %}

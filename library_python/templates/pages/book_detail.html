@@ -1,0 +1,619 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ book.title }} - City Library{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Breadcrumb -->
+    <nav class="mb-6">
+        <ol class="flex items-center gap-2 text-sm text-gray-600">
+            <li><a href="{{ url_for('home') }}" class="hover:text-blue-600">Home</a></li>
+            <li><i class="fas fa-chevron-right text-xs"></i></li>
+            <li><a href="{{ url_for('search') }}" class="hover:text-blue-600">Browse</a></li>
+            <li><i class="fas fa-chevron-right text-xs"></i></li>
+            <li class="text-gray-900">{{ book.title }}</li>
+        </ol>
+    </nav>
+
+    <!-- Reserve Confirmation Modal -->
+    <div id="reserveModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full transform transition-all">
+            <div class="p-6">
+                <div class="flex items-center justify-center w-16 h-16 mx-auto bg-yellow-100 rounded-full mb-4">
+                    <i class="fas fa-bookmark text-3xl text-yellow-600"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-900 text-center mb-2">Đặt trước sách</h3>
+                <p class="text-gray-600 text-center mb-6">
+                    Sách hiện đang được mượn hết. Bạn có muốn đặt trước không? <br>
+                    <span class="text-sm font-semibold text-yellow-600 mt-2 inline-block">
+                        <i class="fas fa-bell mr-1"></i>
+                        Chúng tôi sẽ thông báo khi sách có sẵn
+                    </span>
+                </p>
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeReserveModal()" class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-semibold transition-all">
+                        <i class="fas fa-times mr-2"></i> Hủy
+                    </button>
+                    <button type="button" onclick="confirmReserve()" class="flex-1 px-4 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 font-semibold transition-all shadow-lg">
+                        <i class="fas fa-check mr-2"></i> Xác nhận
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Book Image -->
+        <div class="md:col-span-1">
+            <img src="{{ book.cover_url }}" alt="{{ book.title }}" class="w-full rounded-lg shadow-lg">
+            
+            {% if current_user and current_user.role == 'user' %}
+            <div class="mt-4 space-y-3">
+                {% if is_borrowed %}
+                <!-- Already Borrowed - Show Cancel Button -->
+                <button disabled id="borrowBtn" class="w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold cursor-default">
+                    <i class="fas fa-check-circle mr-2"></i> Already Borrowed
+                </button>
+                <button onclick="cancelBorrow()" id="cancelBtn" class="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-all">
+                    <i class="fas fa-times-circle mr-2"></i> Cancel Borrow
+                </button>
+                
+                {% elif is_reserved %}
+                <!-- Already Reserved -->
+                <button disabled id="borrowBtn" class="w-full px-4 py-3 bg-yellow-600 text-white rounded-lg font-semibold cursor-default">
+                    <i class="fas fa-clock mr-2"></i> Đã đặt trước (Đang chờ)
+                </button>
+                <p class="text-sm text-center text-gray-600 mt-2">
+                    <i class="fas fa-info-circle mr-1"></i> Chúng tôi sẽ thông báo khi sách có sẵn
+                </p>
+                
+                {% elif can_borrow %}
+                <!-- Available - Show Borrow Button -->
+                <button onclick="borrowBook()" id="borrowBtn" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold transition-all">
+                    <i class="fas fa-book mr-2"></i> Borrow This Book
+                </button>
+                
+                {% elif can_reserve %}
+                <!-- Out of Stock - Show Reserve Button -->
+                <button onclick="reserveBook()" id="reserveBtn" class="w-full px-4 py-3 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 font-semibold shadow-lg transition-all">
+                    <i class="fas fa-bookmark mr-2"></i> Reserve This Book
+                </button>
+                <p class="text-sm text-gray-600 text-center mt-2">
+                    <i class="fas fa-info-circle mr-1"></i> Book is currently out of stock. Reserve now!
+                </p>
+                
+                {% else %}
+                <!-- Not Available -->
+                <button disabled id="borrowBtn" class="w-full px-4 py-3 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed">
+                    <i class="fas fa-times-circle mr-2"></i> Not Available
+                </button>
+                {% endif %}
+
+                <button onclick="toggleFavorite()" id="favoriteBtn" class="w-full px-4 py-3 {% if is_favorite %}bg-red-100 text-red-600 border-red-300{% else %}bg-white text-gray-700 border-gray-300{% endif %} border rounded-lg hover:bg-gray-50 font-semibold">
+                    <i class="{% if is_favorite %}fas{% else %}far{% endif %} fa-heart mr-2"></i>
+                    {% if is_favorite %}Remove from Favorites{% else %}Add to Favorites{% endif %}
+                </button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Book Details -->
+        <div class="md:col-span-2">
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ book.title }}</h1>
+            <p class="text-xl text-gray-600 mb-4">by {{ book.author }}</p>
+
+            <div class="flex items-center gap-4 mb-6">
+                <div class="flex items-center gap-1 text-yellow-500">
+                    <i class="fas fa-star"></i>
+                    <span class="text-lg font-semibold text-gray-900">{{ book.rating }}</span>
+                    <span class="text-sm text-gray-600">({{ reviews|length }} reviews)</span>
+                </div>
+                <span class="px-3 py-1 rounded {% if book.available_copies > 0 %}bg-green-100 text-green-800{% else %}bg-red-100 text-red-800{% endif %}">
+                    {{ book.available_copies }} of {{ book.total_copies }} available
+                </span>
+            </div>
+
+            <!-- Book Info -->
+            <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Book Information</h2>
+                <dl class="grid grid-cols-2 gap-4">
+                    <div>
+                        <dt class="text-sm text-gray-600">Category</dt>
+                        <dd class="text-gray-900">{{ book.category }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm text-gray-600">Publisher</dt>
+                        <dd class="text-gray-900">{{ book.publisher }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm text-gray-600">Year</dt>
+                        <dd class="text-gray-900">{{ book.year }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm text-gray-600">Language</dt>
+                        <dd class="text-gray-900">{{ book.language }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm text-gray-600">ISBN</dt>
+                        <dd class="text-gray-900">{{ book.isbn }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm text-gray-600">Shelf Location</dt>
+                        <dd class="text-gray-900">{{ book.shelf_location }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm text-gray-600">Times Borrowed</dt>
+                        <dd class="text-gray-900">{{ book.borrow_count }}</dd>
+                    </div>
+                </dl>
+            </div>
+
+            <!-- Description -->
+            <div class="mb-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-3">Description</h2>
+                <p class="text-gray-700 leading-relaxed">{{ book.description }}</p>
+            </div>
+
+            <!-- Reviews Section -->
+            <div>
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                    Reviews & Ratings ({{ rating_stats.count }})
+                </h2>
+                
+                <!-- Rating Statistics -->
+                {% if rating_stats.count > 0 %}
+                <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                    <div class="flex items-center gap-8">
+                        <div class="text-center">
+                            <div class="text-5xl font-bold text-gray-900">{{ rating_stats.average }}</div>
+                            <div class="flex items-center justify-center gap-1 text-yellow-500 mt-2">
+                                {% for i in range(5) %}
+                                <i class="fas fa-star{% if i >= rating_stats.average|int %} text-gray-300{% endif %}"></i>
+                                {% endfor %}
+                            </div>
+                            <div class="text-sm text-gray-600 mt-1">{{ rating_stats.count }} reviews</div>
+                        </div>
+                        
+                        <div class="flex-1">
+                            {% for star in [5, 4, 3, 2, 1] %}
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-sm text-gray-600 w-8">{{ star }} ⭐</span>
+                                <div class="flex-1 bg-gray-200 rounded-full h-2">
+                                    <div class="bg-yellow-500 h-2 rounded-full" 
+                                         style="width: {{ (rating_stats.distribution[star] / rating_stats.count * 100)|int }}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-600 w-8">{{ rating_stats.distribution[star] }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Write Review Form (for logged-in users) -->
+                {% if current_user %}
+                    {% if can_review %}
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Write Your Review</h3>
+                        <form method="POST" action="{{ url_for('submit_review', book_id=book.id) }}">
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Your Rating</label>
+                                <div class="flex items-center gap-2" id="ratingStars">
+                                    {% for i in range(1, 6) %}
+                                    <i class="far fa-star text-3xl text-gray-400 cursor-pointer hover:text-yellow-500" 
+                                       data-rating="{{ i }}" onclick="setRating({{ i }})"></i>
+                                    {% endfor %}
+                                </div>
+                                <input type="hidden" name="rating" id="ratingInput" required>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Your Review</label>
+                                <textarea name="comment" rows="4" 
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          placeholder="Share your thoughts about this book..."></textarea>
+                            </div>
+                            
+                            <button type="submit" 
+                                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                                <i class="fas fa-paper-plane mr-2"></i>Submit Review
+                            </button>
+                        </form>
+                    </div>
+                    {% elif user_review %}
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Your Review</h3>
+                        <div class="flex items-center gap-1 text-yellow-500 mb-2">
+                            {% for i in range(user_review.rating) %}
+                            <i class="fas fa-star"></i>
+                            {% endfor %}
+                        </div>
+                        <p class="text-gray-700 mb-4">{{ user_review.comment }}</p>
+                        <div class="flex gap-2">
+                            <button onclick="showEditReview('{{ user_review.id }}', {{ user_review.rating }}, '{{ user_review.comment|replace("'", "\\'") }}')"
+                                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                                <i class="fas fa-edit mr-1"></i>Edit
+                            </button>
+                            <form method="POST" action="{{ url_for('delete_review', review_id=user_review.id) }}" 
+                                  onsubmit="return confirm('Are you sure you want to delete your review?')" class="inline">
+                                <button type="submit" 
+                                        class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
+                                    <i class="fas fa-trash mr-1"></i>Delete
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endif %}
+                
+                <!-- Reviews List -->
+                {% if reviews %}
+                <div class="space-y-4">
+                    {% for review in reviews %}
+                    <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-user text-gray-600"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-900">
+                                        {{ review.user_name }}
+                                        {% if review.user_role == 'staff' %}
+                                        <span class="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded ml-2">Staff</span>
+                                        {% elif review.user_role == 'admin' %}
+                                        <span class="text-xs px-2 py-1 bg-red-100 text-red-700 rounded ml-2">Admin</span>
+                                        {% endif %}
+                                    </p>
+                                    <p class="text-xs text-gray-500">{{ review.date }}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1 text-yellow-500">
+                                {% for i in range(review.rating) %}
+                                <i class="fas fa-star text-sm"></i>
+                                {% endfor %}
+                                {% for i in range(5 - review.rating) %}
+                                <i class="far fa-star text-sm text-gray-300"></i>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% if review.comment %}
+                        <p class="text-gray-700 mt-2">{{ review.comment }}</p>
+                        {% endif %}
+                        
+                        <!-- Delete button for admin -->
+                        {% if current_user and current_user.role == 'admin' and review.user_id != current_user.id %}
+                        <form method="POST" action="{{ url_for('delete_review', review_id=review.id) }}" 
+                              onsubmit="return confirm('Delete this review?')" class="mt-2">
+                            <button type="submit" class="text-xs text-red-600 hover:text-red-800">
+                                <i class="fas fa-trash mr-1"></i>Delete
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 bg-gray-50 rounded-lg">
+                    <i class="fas fa-comment-slash text-4xl text-gray-400 mb-2"></i>
+                    <p class="text-gray-600">No reviews yet. Be the first to review this book!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Toggle Favorite
+function toggleFavorite() {
+    const bookId = '{{ book.id }}';
+    const isFavorite = {{ 'true' if is_favorite else 'false' }};
+    const method = isFavorite ? 'DELETE' : 'POST';
+    
+    fetch(`/api/favorites/${bookId}`, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message);
+        }
+    });
+}
+
+// Rating Stars Interaction
+let selectedRating = 0;
+
+function setRating(rating) {
+    selectedRating = rating;
+    document.getElementById('ratingInput').value = rating;
+    
+    // Update star display
+    const stars = document.querySelectorAll('#ratingStars i');
+    stars.forEach((star, index) => {
+        if (index < rating) {
+            star.classList.remove('far', 'text-gray-400');
+            star.classList.add('fas', 'text-yellow-500');
+        } else {
+            star.classList.remove('fas', 'text-yellow-500');
+            star.classList.add('far', 'text-gray-400');
+        }
+    });
+}
+
+// Show Edit Review Modal
+function showEditReview(reviewId, currentRating, currentComment) {
+    const editHtml = `
+        <div id="editModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onclick="closeEditModal(event)">
+            <div class="bg-white rounded-lg p-6 max-w-lg w-full mx-4" onclick="event.stopPropagation()">
+                <h3 class="text-xl font-semibold text-gray-900 mb-4">Edit Your Review</h3>
+                <form method="POST" action="/api/reviews/${reviewId}/edit">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Your Rating</label>
+                        <div class="flex items-center gap-2" id="editRatingStars">
+                            ${[1,2,3,4,5].map(i => `
+                                <i class="${i <= currentRating ? 'fas' : 'far'} fa-star text-3xl ${i <= currentRating ? 'text-yellow-500' : 'text-gray-400'} cursor-pointer" 
+                                   onclick="setEditRating(${i})"></i>
+                            `).join('')}
+                        </div>
+                        <input type="hidden" name="rating" id="editRatingInput" value="${currentRating}" required>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Your Review</label>
+                        <textarea name="comment" rows="4" 
+                                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">${currentComment || ''}</textarea>
+                    </div>
+                    
+                    <div class="flex gap-2 justify-end">
+                        <button type="button" onclick="closeEditModal()" 
+                                class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                            Update Review
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', editHtml);
+}
+
+function setEditRating(rating) {
+    document.getElementById('editRatingInput').value = rating;
+    
+    const stars = document.querySelectorAll('#editRatingStars i');
+    stars.forEach((star, index) => {
+        if (index < rating) {
+            star.classList.remove('far', 'text-gray-400');
+            star.classList.add('fas', 'text-yellow-500');
+        } else {
+            star.classList.remove('fas', 'text-yellow-500');
+            star.classList.add('far', 'text-gray-400');
+        }
+    });
+}
+
+function closeEditModal(event) {
+    if (!event || event.target.id === 'editModal') {
+        const modal = document.getElementById('editModal');
+        if (modal) modal.remove();
+    }
+}
+
+// Borrow Book with AJAX
+function borrowBook() {
+    const btn = document.getElementById('borrowBtn');
+    const originalHtml = btn.innerHTML;
+    
+    // Disable button and show loading
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Processing...';
+    
+    fetch('/api/borrow/{{ book.id }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Change button to "Borrowed" state
+            btn.className = 'w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold cursor-default';
+            btn.innerHTML = '<i class="fas fa-check-circle mr-2"></i> Already Borrowed';
+            
+            // Add cancel button
+            const cancelBtn = document.createElement('button');
+            cancelBtn.id = 'cancelBtn';
+            cancelBtn.className = 'w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-all';
+            cancelBtn.innerHTML = '<i class="fas fa-times-circle mr-2"></i> Cancel Borrow';
+            cancelBtn.onclick = cancelBorrow;
+            btn.parentElement.insertBefore(cancelBtn, btn.nextSibling);
+            
+            // Update available copies display
+            const availableBadge = document.querySelector('.bg-green-100, .bg-red-100');
+            if (availableBadge) {
+                const currentAvailable = parseInt(availableBadge.textContent.match(/\d+/)[0]);
+                const totalCopies = parseInt(availableBadge.textContent.match(/of (\d+)/)[1]);
+                const newAvailable = currentAvailable - 1;
+                
+                if (newAvailable === 0) {
+                    availableBadge.className = 'px-3 py-1 rounded bg-red-100 text-red-800';
+                    availableBadge.textContent = `0 of ${totalCopies} available`;
+                } else {
+                    availableBadge.textContent = `${newAvailable} of ${totalCopies} available`;
+                }
+            }
+            
+            alert(data.message);
+        } else {
+            // Restore button on error
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        alert('An error occurred. Please try again.');
+    });
+}
+
+// Reserve Book with AJAX (Updated: v2.0 - Modal confirmation required)
+// Show reserve modal - NO API call yet!
+function reserveBook() {
+    // Only open modal, don't call API
+    document.getElementById('reserveModal').classList.remove('hidden');
+}
+
+// Close reserve modal
+function closeReserveModal() {
+    document.getElementById('reserveModal').classList.add('hidden');
+}
+
+// Prevent duplicate requests
+let isReserving = false;
+
+// Confirm reservation
+function confirmReserve() {
+    // Prevent duplicate calls
+    if (isReserving) {
+        console.log('Reserve already in progress, ignoring duplicate call');
+        return;
+    }
+    
+    isReserving = true;
+    const modal = document.getElementById('reserveModal');
+    const btn = document.getElementById('reserveBtn');
+    const originalHtml = btn.innerHTML;
+    
+    // Close modal
+    modal.classList.add('hidden');
+    
+    // Disable button and show loading
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Đang xử lý...';
+    
+    fetch('/api/reserve/{{ book.id }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message briefly then reload
+            btn.className = 'w-full px-4 py-3 bg-green-600 text-white rounded-lg font-semibold';
+            btn.innerHTML = '<i class="fas fa-check-circle mr-2"></i> Đặt trước thành công!';
+            
+            // Reload page after 1.5 seconds
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            isReserving = false; // Reset flag on error
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+            alert(data.message || 'Có lỗi xảy ra. Vui lòng thử lại.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        isReserving = false; // Reset flag on error
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        alert('Có lỗi xảy ra. Vui lòng thử lại.');
+    });
+}
+
+// Cancel Borrow with AJAX
+function cancelBorrow() {
+    if (!confirm('Are you sure you want to cancel this borrow request?')) {
+        return;
+    }
+    
+    const cancelBtn = document.getElementById('cancelBtn');
+    const originalHtml = cancelBtn.innerHTML;
+    
+    cancelBtn.disabled = true;
+    cancelBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Canceling...';
+    
+    fetch('/api/cancel/{{ book.id }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Reload page to refresh state
+            window.location.reload();
+        } else {
+            cancelBtn.disabled = false;
+            cancelBtn.innerHTML = originalHtml;
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        cancelBtn.disabled = false;
+        cancelBtn.innerHTML = originalHtml;
+        alert('An error occurred. Please try again.');
+    });
+}
+
+// Cancel Reservation with AJAX
+function cancelReservation() {
+    if (!confirm('Are you sure you want to cancel this reservation?')) {
+        return;
+    }
+    
+    const cancelBtn = document.getElementById('cancelBtn');
+    const originalHtml = cancelBtn.innerHTML;
+    
+    cancelBtn.disabled = true;
+    cancelBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Canceling...';
+    
+    fetch('/api/cancel/{{ book.id }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Reload page to refresh state
+            window.location.reload();
+        } else {
+            cancelBtn.disabled = false;
+            cancelBtn.innerHTML = originalHtml;
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        cancelBtn.disabled = false;
+        cancelBtn.innerHTML = originalHtml;
+        alert('An error occurred. Please try again.');
+    });
+}
+</script>
+{% endblock %}

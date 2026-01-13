@@ -1,0 +1,43 @@
+{% extends "layout.html" %}
+
+{% block title %}Chat - City Library{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">Chat</h1>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
+        <!-- Conversations List -->
+        <div class="bg-white rounded-lg shadow-sm overflow-y-auto">
+            <div class="p-4 border-b">
+                <h2 class="font-semibold text-gray-900">Conversations</h2>
+            </div>
+            <div class="p-4">
+                <p class="text-gray-600 text-center">No conversations yet</p>
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="md:col-span-2 bg-white rounded-lg shadow-sm flex flex-col">
+            <div class="p-4 border-b">
+                <h2 class="font-semibold text-gray-900">Select a conversation</h2>
+            </div>
+            <div class="flex-1 p-4 overflow-y-auto">
+                <p class="text-gray-600 text-center">No messages</p>
+            </div>
+            <div class="p-4 border-t">
+                <div class="flex gap-2">
+                    <input
+                        type="text"
+                        placeholder="Type a message..."
+                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
