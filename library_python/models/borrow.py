@@ -1,18 +1,13 @@
-"""
-Borrow model with improved fine calculation and business rules.
+"""Borrow model with improved fine calculation and business rules.
 
-Updated to implement:
-1. Proper fine calculation (grace period + hourly/daily rates)
-2. 48-hour pending pickup logic
-3. Damage/loss penalties
-4. Reservation checking for renewals
+Refactored for cleaner logic and property access.
 """
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
-from models.database import get_db
-from models.book import Book
-from config.config import Config
 
+from config.config import Config
+from models.book import Book
+from models.database import get_db
 
 class Borrow:
     def __init__(self, id, user_id, book_id, borrow_date, due_date, return_date,
@@ -30,23 +25,34 @@ class Borrow:
         self.condition = condition
         self.damage_fee = float(damage_fee) if damage_fee else 0.0
         self.late_fee = float(late_fee) if late_fee else 0.0
-    
+        
+    # ---------- Convenience properties for templates ----------
+    @property
+    def is_pending(self) -> bool:
+        """Return True if this borrow is waiting for pickup."""
+        return self.status == 'pending_pickup'
+
+    @property
+    def is_borrowed(self) -> bool:
+        """Return True if the book is currently held by user."""
+        return self.status == 'borrowed'
+
+    @property
+    def can_be_cancelled(self) -> bool:
+        """Return True if this borrow request can be cancelled by user.
+        Only pending pickup requests can be cancelled.
+        """
+        return self.is_pending
+
+    @property
+    def is_active(self) -> bool:
+        """Return True if this borrow is currently active."""
+        return self.status in ('pending_pickup', 'borrowed')
+
+  
     @staticmethod
     def calculate_late_fee(due_date: datetime, return_date: datetime) -> float:
-        """Calculate late fee with grace period and tiered rates.
-        
-        SRS Requirements:
-        - Grace Period: First 30 minutes are FREE
-        - Short-term delay (< 24 hours after grace): 2,000 VND/hour
-        - Long-term delay (>= 24 hours after grace): 10,000 VND/day
-        
-        Args:
-            due_date: When book was due.
-            return_date: When book was actually returned.
-            
-        Returns:
-            Late fee amount.
-        """
+        """Calculate late fee with grace period and tiered rates."""
         # No fee if returned on time
         if return_date <= due_date:
             return 0.0
@@ -83,20 +89,7 @@ class Borrow:
     
     @staticmethod
     def calculate_damage_fee(condition: str, book_value: float) -> float:
-        """Calculate damage or loss fee based on condition.
-        
-        SRS Requirements:
-        - Minor Damage (Level 1): 20% of book value
-        - Major Damage (Level 2): 100% of book value + 15,000 VND processing
-        - Lost Material (Level 3): 100% of book value + 20,000 VND re-stocking
-        
-        Args:
-            condition: Book condition ('good', 'minor_damage', 'major_damage', 'lost').
-            book_value: Original value of the book.
-            
-        Returns:
-            Damage/loss fee amount.
-        """
+        """Calculate damage or loss fee based on condition."""
         if condition == 'good':
             return 0.0
         elif condition == 'minor_damage':
@@ -137,14 +130,7 @@ class Borrow:
     
     @staticmethod
     def get_active_borrows(user_id):
-        """Get active borrows (pending_pickup or borrowed).
-        
-        Status flow:
-        - pending_pickup: User requested, waiting for pickup (book is reserved)
-        - borrowed: User has picked up the book
-        
-        Note: Old 'waiting' status is deprecated and NOT included here.
-        """
+        """Get active borrows (pending_pickup or borrowed)."""
         db = get_db()
         rows = db.execute(
             "SELECT * FROM borrows WHERE user_id = ? AND status IN ('borrowed', 'pending_pickup') ORDER BY borrow_date DESC",
@@ -188,10 +174,7 @@ class Borrow:
     
     @staticmethod
     def get_all_pending():
-        """Get all pending borrow requests (pending_pickup status).
-        
-        Note: Old 'waiting' status is deprecated. New flow uses 'pending_pickup'.
-        """
+        """Get all pending borrow requests (pending_pickup status)."""
         db = get_db()
         rows = db.execute(
             "SELECT * FROM borrows WHERE status = 'pending_pickup' ORDER BY borrow_date ASC"
@@ -200,14 +183,7 @@ class Borrow:
     
     @staticmethod
     def get_user_borrows_by_status(status):
-        """Get all borrows with a specific status.
-        
-        Args:
-            status: Status to filter by (e.g., 'pending_pickup', 'borrowed', 'returned').
-            
-        Returns:
-            List of Borrow instances.
-        """
+        """Get all borrows with a specific status."""
         db = get_db()
         rows = db.execute(
             "SELECT * FROM borrows WHERE status = ? ORDER BY borrow_date DESC",
@@ -223,29 +199,39 @@ class Borrow:
             "SELECT * FROM borrows ORDER BY borrow_date DESC"
         ).fetchall()
         return [Borrow(**dict(row)) for row in rows]
+
+    # ==================== STATISTICAL METHODS (Restored for Dashboard) ====================
     
     @staticmethod
-    def create(user_id, book_id):
-        """Create new borrow request with DIRECT PENDING status.
-        
-        NEW FLOW (Senior Dev requirement):
-        - User clicks "Borrow Book" → Immediately create pending_pickup record
-        - Decrease available_copies RIGHT AWAY to reserve the book
-        - Set pending_until = now + 48 hours
-        - Staff approves pickup later when user arrives
-        
-        Why decrease quantity immediately?
-        - Prevents race condition: Multiple users borrowing same last copy
-        - Reserves the book for this specific user
-        - Book is "held" but not yet "borrowed" until pickup confirmation
-        
-        Args:
-            user_id: ID of user requesting to borrow
-            book_id: ID of book to borrow
-            
-        Returns:
-            Tuple of (Borrow instance or None, message string)
+    def get_active_borrows_count() -> int:
+        """Get total count of active borrows (borrowed + pending).
+        Used by Staff/Admin dashboards.
         """
+        db = get_db()
+        # Include both 'borrowed', 'pending_pickup' and legacy 'waiting'
+        row = db.execute(
+            "SELECT COUNT(*) as count FROM borrows WHERE status IN ('borrowed', 'pending_pickup', 'waiting')"
+        ).fetchone()
+        return row['count']
+
+    @staticmethod
+    def get_overdue_count() -> int:
+        """Get total count of overdue books.
+        Used by Staff/Admin dashboards.
+        """
+        db = get_db()
+        today = datetime.now().strftime('%Y-%m-%d')
+        row = db.execute(
+            "SELECT COUNT(*) as count FROM borrows WHERE status = 'borrowed' AND due_date < ?",
+            (today,)
+        ).fetchone()
+        return row['count']
+    
+    # ==================== CORE LOGIC ====================
+
+    @staticmethod
+    def create(user_id, book_id):
+        """Create new borrow request with DIRECT PENDING status."""
         import uuid
         db = get_db()
         
@@ -281,7 +267,6 @@ class Borrow:
         pending_until = (now + timedelta(hours=Config.PENDING_PICKUP_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
         
         # Note: due_date will be set later when staff approves pickup
-        # For now, we estimate it as 7 days from now (will be recalculated on approval)
         estimated_due_date = (now + timedelta(days=Config.BORROW_DURATION_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
         
         try:
@@ -294,10 +279,7 @@ class Borrow:
             ''', (borrow_id, user_id, book_id, borrow_date, estimated_due_date, pending_until))
             
             # CRITICAL: Decrease available_copies immediately to reserve the book
-            # This prevents other users from borrowing the same copy
             book.update_available_copies(-1)
-            
-            # Increment borrow count for statistics
             book.increment_borrow_count()
             
             db.commit()
@@ -331,45 +313,39 @@ class Borrow:
         
         return True, "Borrow request approved"
     
-    def approve_pickup(self):
-        """Approve and complete book pickup by user.
-        
-        NEW FLOW (Senior Dev requirement):
-        - Staff calls this when user arrives to pick up the book
-        - Status changes from 'pending_pickup' → 'borrowed'
-        - due_date is SET HERE (now + 7 days) NOT at creation time
-        - This ensures accurate 7-day borrow period from actual pickup
-        
-        Returns:
-            Tuple of (success, message).
-        """
+    def approve_pickup(self) -> Tuple[bool, str]:
+        """Approve and complete book pickup by user."""
         if self.status != 'pending_pickup':
             return False, "Only pending pickup requests can be approved"
-        
+
         # Check if pickup deadline has passed
         if self.pending_until:
-            deadline = datetime.strptime(self.pending_until, '%Y-%m-%d %H:%M:%S')
+            deadline = datetime.strptime(
+                self.pending_until, '%Y-%m-%d %H:%M:%S'
+            )
             if datetime.now() > deadline:
                 self.cancel()
-                return False, "Pickup deadline has passed. Request has been cancelled."
-        
+                return False, ("Pickup deadline has passed. "
+                             "Request has been cancelled.")
+
         db = get_db()
         now = datetime.now()
-        
+
         # Update status to 'borrowed'
         self.status = 'borrowed'
-        
-        # CRITICAL: Set due_date = NOW + 7 days (actual borrow period starts now)
-        # This is different from estimated due_date set during creation
-        self.due_date = (now + timedelta(days=Config.BORROW_DURATION_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
-        
+
+        # CRITICAL: Set due_date = NOW + 7 days
+        self.due_date = (
+            now + timedelta(days=Config.BORROW_DURATION_DAYS)
+        ).strftime('%Y-%m-%d %H:%M:%S')
+
         db.execute('''
-            UPDATE borrows 
-            SET status = ?, due_date = ? 
+            UPDATE borrows
+            SET status = ?, due_date = ?
             WHERE id = ?
         ''', ('borrowed', self.due_date, self.id))
         db.commit()
-        
+
         # Log pickup confirmation
         from models.system_log import SystemLog
         from models.user import User
@@ -382,82 +358,66 @@ class Borrow:
                 'info',
                 self.user_id
             )
-        
-        return True, f"Book pickup confirmed! Please return by {self.due_date}"
-        from models.system_log import SystemLog
-        from models.user import User
-        user = User.get_by_id(self.user_id)
-        book = Book.get_by_id(self.book_id)
-        if user and book:
-            SystemLog.add(
-                'Book Pickup Completed',
-                f'{user.name} picked up "{book.title}"',
-                'info',
-                self.user_id
-            )
-        
-        return True, "Book pickup approved. Status changed to borrowed."
 
-    def return_book(self, condition='good', book_value=0.0):
-        """Return borrowed book with condition assessment and proper fee calculation.
-        
-        Args:
-            condition: Book condition ('good', 'minor_damage', 'major_damage', 'lost').
-            book_value: Original value of book for damage fee calculation.
-            
-        Returns:
-            Tuple of (success, message).
-        """
+        return True, f"Book pickup confirmed! Please return by {self.due_date}"
+
+    def return_book(self, condition='good', book_value=0.0) -> Tuple[bool, str]:
+        """Return borrowed book with condition assessment and fee calculation."""
         if self.status != 'borrowed':
             return False, "Only borrowed books can be returned"
-        
+
         from models.user import User
         from models.reservation import Reservation
         from models.system_log import SystemLog
-        
+        from models.fine import Fine
+
         db = get_db()
         return_timestamp = datetime.now()
         self.return_date = return_timestamp.strftime('%Y-%m-%d %H:%M:%S')
         self.status = 'returned'
         self.condition = condition
-        
+
         # Calculate late fee with grace period
         due_timestamp = datetime.strptime(self.due_date, '%Y-%m-%d %H:%M:%S')
         self.late_fee = self.calculate_late_fee(due_timestamp, return_timestamp)
-        
+
         # Calculate damage fee
         self.damage_fee = self.calculate_damage_fee(condition, book_value)
-        
+
         # Update database
         db.execute('''
-            UPDATE borrows 
-            SET status = ?, return_date = ?, condition = ?, 
+            UPDATE borrows
+            SET status = ?, return_date = ?, condition = ?,
                 late_fee = ?, damage_fee = ?
             WHERE id = ?
         ''', (self.status, self.return_date, self.condition,
               self.late_fee, self.damage_fee, self.id))
-        
+
         # Return book to inventory
         book = Book.get_by_id(self.book_id)
         if book:
             book.update_available_copies(1)
-        
-        # Apply fines to user account
+
+        # Apply fines to user account and create Fine record
         total_fine = self.late_fee + self.damage_fee
         if total_fine > 0:
             user = User.get_by_id(self.user_id)
             if user:
                 user.add_fine(total_fine)
                 user.add_violation()
-        
+                # Create Fine object automatically
+                fine_reason = f"Return fees (Late: {self.late_fee:,.0f} VND, "
+                fine_reason += f"Damage: {self.damage_fee:,.0f} VND)"
+                Fine.create(self.user_id, total_fine, fine_reason, self.id)
+
         db.commit()
-        
+
         # Check for reservations and notify next in queue
         if Reservation.has_active_reservations(self.book_id):
             next_reservation = Reservation.get_next_in_queue(self.book_id)
             if next_reservation:
                 next_reservation.mark_ready(hold_hours=48)
-        
+
         # Log return
         user = User.get_by_id(self.user_id)
         if user and book:
@@ -466,52 +426,43 @@ class Borrow:
                 details += f', Total Fine: {total_fine:,.0f} VND'
             details += ')'
             SystemLog.add('Book Returned', details, 'info', self.user_id)
-        
-        return True, f"Book returned. Late fee: {self.late_fee:,.0f} VND, Damage fee: {self.damage_fee:,.0f} VND"
+
+        message = f"Book returned successfully"
+        if total_fine > 0:
+            message += f". Late fee: {self.late_fee:,.0f} VND, "
+            message += f"Damage fee: {self.damage_fee:,.0f} VND"
+        return True, message
     
-    def renew(self, extension_days=7):
-        """Renew borrowed book with proper business rules.
-        
-        SRS Requirements:
-        - Extension days: 7 days (not 14)
-        - Only allowed once (renewed_count < 1)
-        - Not allowed if someone has reserved this book
-        - Not allowed if book is overdue
-        
-        Args:
-            extension_days: Number of days to extend (default 7).
-            
-        Returns:
-            Tuple of (success, message).
-        """
+    def renew(self, extension_days=7) -> Tuple[bool, str]:
+        """Renew borrowed book with proper business rules."""
         if self.status != 'borrowed':
             return False, "Only borrowed books can be renewed"
-        
+
         # Check renewal limit (max 1 time)
         if self.renewed_count >= 1:
             return False, "Maximum renewal limit (1 time) has been reached"
-        
+
         # Check if book is overdue
         due_timestamp = datetime.strptime(self.due_date, '%Y-%m-%d %H:%M:%S')
         if datetime.now() > due_timestamp:
             return False, "Overdue books cannot be renewed"
-        
+
         # Check if anyone has reserved this book
         from models.reservation import Reservation
         if Reservation.has_active_reservations(self.book_id):
             return False, "Cannot renew: Someone has reserved this book"
-        
+
         # Extend due date by 7 days
         new_due_timestamp = due_timestamp + timedelta(days=extension_days)
         self.due_date = new_due_timestamp.strftime('%Y-%m-%d %H:%M:%S')
         self.renewed_count += 1
-        
+
         db = get_db()
         db.execute('''
             UPDATE borrows SET due_date = ?, renewed_count = ? WHERE id = ?
         ''', (self.due_date, self.renewed_count, self.id))
         db.commit()
-        
+
         # Log renewal
         from models.system_log import SystemLog
         from models.user import User
@@ -524,38 +475,37 @@ class Borrow:
                 'info',
                 self.user_id
             )
-        
+
         return True, f"Book renewed successfully. New due date: {self.due_date}"
     
-    def cancel(self):
-        """Cancel borrow request and restore book availability.
-        
-        Returns:
-            Tuple of (success, message).
-        """
+    def cancel(self) -> Tuple[bool, str]:
+        """Cancel borrow request and restore book availability."""
         if self.status not in ['pending_pickup']:
             return False, "Only pending pickup requests can be cancelled"
-        
+
         db = get_db()
         self.status = 'cancelled'
-        
+
         # Update status
-        db.execute('UPDATE borrows SET status = ? WHERE id = ?', ('cancelled', self.id))
-        
+        db.execute(
+            'UPDATE borrows SET status = ? WHERE id = ?',
+            ('cancelled', self.id)
+        )
+
         # Return book to available inventory
         book = Book.get_by_id(self.book_id)
         if book:
             book.update_available_copies(1)
-        
+
         db.commit()
-        
+
         # Check for reservations
         from models.reservation import Reservation
         if Reservation.has_active_reservations(self.book_id):
             next_reservation = Reservation.get_next_in_queue(self.book_id)
             if next_reservation:
                 next_reservation.mark_ready(hold_hours=48)
-        
+
         return True, "Borrow request cancelled"
     
     @staticmethod
@@ -585,11 +535,30 @@ class Borrow:
                     cancelled_count += 1
         
         return cancelled_count
-        db.execute('DELETE FROM borrows WHERE id = ?', (self.id,))
-        db.commit()
-        
-        return True, "Borrow request cancelled"
-    
+
+    @staticmethod
+    def get_user_reserved_books(user_id: str) -> list:
+        """Get all reserved books for a user (Helper)."""
+        from models.reservation import Reservation
+        return Reservation.get_user_reservations(user_id, status='waiting')
+
+    @staticmethod
+    def get_user_overdue_books(user_id: str) -> list:
+        """Get overdue books for a user (Helper)."""
+        return Borrow.get_overdue_borrows(user_id)
+
+    @staticmethod
+    def get_upcoming_due_books(user_id: str, days: int = 3) -> list:
+        """Get books due within specified days (Helper)."""
+        return Borrow.get_upcoming_due(user_id, days)
+
+    @staticmethod
+    def get_user_borrowed_books(user_id: str) -> list:
+        """Get all borrowed books for a user (including pending_pickup)."""
+        borrowed = Borrow.get_user_borrows(user_id, status='borrowed')
+        pending = Borrow.get_user_borrows(user_id, status='pending_pickup')
+        return borrowed + pending
+
     def get_book(self):
         """Get the book object"""
         return Book.get_by_id(self.book_id)
@@ -645,205 +614,3 @@ class Borrow:
             'overdue_days': self.get_overdue_days(),
             'fine_amount': self.get_fine_amount()
         }
-    
-    # ==================== SERVICE METHODS (Merged from BorrowService) ====================
-    
-    @staticmethod
-    def borrow_book(user_id: str, book_id: str) -> tuple:
-        """Create borrow request with validation and logging.
-        
-        Args:
-            user_id: ID of user requesting to borrow.
-            book_id: ID of book to borrow.
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        from models.user import User
-        from models.system_log import SystemLog
-        
-        user = User.get_by_id(user_id)
-        if not user:
-            return False, "User not found"
-        
-        if user.is_locked:
-            return False, "Your account is locked. Please contact the library."
-        
-        borrow, message = Borrow.create(user_id, book_id)
-        if borrow:
-            book = Book.get_by_id(book_id)
-            if book:
-                SystemLog.add(
-                    'Book Borrow Request',
-                    f'{user.name} requested to borrow "{book.title}"',
-                    'info',
-                    user_id
-                )
-            return True, message
-        return False, message
-    
-    @staticmethod
-    def return_book_by_user(user_id: str, book_id: str, condition: str = 'good', book_value: float = 0.0) -> tuple:
-        """Return borrowed book with condition assessment.
-        
-        Args:
-            user_id: ID of user returning the book.
-            book_id: ID of book being returned.
-            condition: Book condition.
-            book_value: Original value of book for damage fee calculation.
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        borrows = Borrow.get_active_borrows(user_id)
-        for borrow in borrows:
-            if borrow.book_id == book_id and borrow.status == 'borrowed':
-                return borrow.return_book(condition, book_value)
-        
-        return False, "No active borrow found for this book"
-    
-    @staticmethod
-    def renew_book_by_user(user_id: str, book_id: str, extension_days: int = 7) -> tuple:
-        """Renew borrowed book.
-        
-        Args:
-            user_id: ID of user renewing the book.
-            book_id: ID of book to renew.
-            extension_days: Number of days to extend.
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        borrows = Borrow.get_active_borrows(user_id)
-        for borrow in borrows:
-            if borrow.book_id == book_id and borrow.status == 'borrowed':
-                return borrow.renew(extension_days)
-        
-        return False, "No active borrow found for this book"
-    
-    @staticmethod
-    def cancel_borrow_by_user(user_id: str, book_id: str) -> tuple:
-        """Cancel borrow request.
-        
-        Args:
-            user_id: ID of user cancelling the request.
-            book_id: ID of book to cancel.
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        borrows = Borrow.get_user_borrows(user_id, status='pending_pickup')
-        for borrow in borrows:
-            if borrow.book_id == book_id:
-                return borrow.cancel()
-        
-        return False, "No pending borrow request found for this book"
-    
-    @staticmethod
-    def approve_borrow_by_id(borrow_id: str) -> tuple:
-        """Approve borrow request (staff/admin).
-        
-        Args:
-            borrow_id: ID of borrow request to approve.
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        from models.user import User
-        from models.system_log import SystemLog
-        
-        borrow = Borrow.get_by_id(borrow_id)
-        if borrow:
-            success, message = borrow.approve()
-            if success:
-                user = User.get_by_id(borrow.user_id)
-                book = Book.get_by_id(borrow.book_id)
-                if user and book:
-                    SystemLog.add(
-                        'Borrow Request Approved',
-                        f'Staff approved borrow request: {user.name} for "{book.title}"',
-                        'admin',
-                        None
-                    )
-            return success, message
-        return False, "Borrow request not found"
-    
-    @staticmethod
-    def get_user_borrowed_books(user_id: str) -> list:
-        """Get all borrowed books for a user (including pending_pickup).
-        
-        Args:
-            user_id: ID of user.
-            
-        Returns:
-            List of Borrow instances.
-        """
-        borrowed = Borrow.get_user_borrows(user_id, status='borrowed')
-        pending = Borrow.get_user_borrows(user_id, status='pending_pickup')
-        return borrowed + pending
-    
-    @staticmethod
-    def get_user_reserved_books(user_id: str) -> list:
-        """Get all reserved books for a user.
-        
-        Args:
-            user_id: ID of user.
-            
-        Returns:
-            List of Reservation instances.
-        """
-        from models.reservation import Reservation
-        return Reservation.get_user_reservations(user_id, status='waiting')
-    
-    @staticmethod
-    def get_user_overdue_books(user_id: str) -> list:
-        """Get overdue books for a user.
-        
-        Args:
-            user_id: ID of user.
-            
-        Returns:
-            List of Borrow instances.
-        """
-        return Borrow.get_overdue_borrows(user_id)
-    
-    @staticmethod
-    def get_upcoming_due_books(user_id: str, days: int = 3) -> list:
-        """Get books due within specified days.
-        
-        Args:
-            user_id: ID of user.
-            days: Number of days to look ahead.
-            
-        Returns:
-            List of Borrow instances.
-        """
-        return Borrow.get_upcoming_due(user_id, days)
-    
-    @staticmethod
-    def get_active_borrows_count() -> int:
-        """Get total count of active borrows.
-        
-        Returns:
-            Count of active borrows.
-        """
-        db = get_db()
-        row = db.execute(
-            "SELECT COUNT(*) as count FROM borrows WHERE status IN ('borrowed', 'waiting')"
-        ).fetchone()
-        return row['count']
-    
-    @staticmethod
-    def get_overdue_count() -> int:
-        """Get total count of overdue books.
-        
-        Returns:
-            Count of overdue borrows.
-        """
-        db = get_db()
-        today = datetime.now().strftime('%Y-%m-%d')
-        row = db.execute(
-            "SELECT COUNT(*) as count FROM borrows WHERE status = 'borrowed' AND due_date < ?",
-            (today,)
-        ).fetchone()
-        return row['count']

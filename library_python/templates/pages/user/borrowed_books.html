@@ -10,7 +10,7 @@
     <div class="space-y-4">
         {% for borrow in borrowed_books %}
         {% set book = borrow.get_book() %}
-        <div class="bg-white rounded-lg shadow-sm p-6">
+        <div class="bg-white rounded-lg shadow-sm p-6 border-l-4 {% if borrow.is_pending %}border-yellow-400{% elif borrow.is_overdue() %}border-red-500{% else %}border-green-500{% endif %}">
             <div class="flex gap-6">
                 <img src="{{ book.cover_url }}" alt="{{ book.title }}" class="w-24 h-36 object-cover rounded">
                 
@@ -20,59 +20,58 @@
                     
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                         <div>
-                            <p class="text-sm text-gray-600">Borrowed Date</p>
+                            <p class="text-sm text-gray-600">
+                                {{ "Requested On" if borrow.is_pending else "Borrowed On" }}
+                            </p>
                             <p class="font-semibold text-gray-900">{{ borrow.borrow_date }}</p>
                         </div>
                         <div>
-                            <p class="text-sm text-gray-600">Due Date</p>
-                            <p class="font-semibold {% if borrow.is_overdue() %}text-red-600{% else %}text-gray-900{% endif %}">
-                                {{ borrow.due_date }}
+                            <p class="text-sm text-gray-600">
+                                {{ "Pickup Deadline" if borrow.is_pending else "Due Date" }}
+                            </p>
+                            <p class="font-semibold {% if not borrow.is_pending and borrow.is_overdue() %}text-red-600{% endif %}">
+                                {{ borrow.pending_until if borrow.is_pending else borrow.due_date }}
                             </p>
                         </div>
                         <div>
                             <p class="text-sm text-gray-600">Status</p>
-                            <p class="font-semibold">
-                                {% if borrow.is_overdue() %}
-                                    <span class="text-red-600">Overdue ({{ borrow.get_overdue_days() }} days)</span>
-                                {% else %}
-                                    <span class="text-green-600">On Time</span>
-                                {% endif %}
-                            </p>
-                        </div>
-                        <div>
-                            <p class="text-sm text-gray-600">Renewals</p>
-                            <p class="font-semibold text-gray-900">{{ borrow.renewed_count }}/1</p>
+                            {% if borrow.is_pending %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                    Pending Pickup
+                                </span>
+                            {% elif borrow.is_overdue() %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    Overdue
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    Borrowed
+                                </span>
+                            {% endif %}
                         </div>
                     </div>
 
-                    {% if borrow.is_overdue() %}
-                    <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-                        <p class="text-sm text-red-800">
-                            <i class="fas fa-exclamation-triangle mr-2"></i>
-                            Fine: ${{ "%.2f"|format(borrow.get_fine_amount()) }}
-                        </p>
-                    </div>
-                    {% endif %}
-
-                    <div class="flex gap-3">
-                        {% if borrow.status == 'borrowed' and not borrow.is_overdue() and borrow.renewed_count < 1 %}
-                        <button onclick="openRenewModal('{{ book.id }}', '{{ book.title }}', {{ borrow.renewed_count }})" 
-                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
-                            <i class="fas fa-redo mr-2"></i> Renew
+                    <div class="flex gap-3 items-center">
+                        {% if borrow.can_be_cancelled %}
+                        <button onclick="cancelBorrow('{{ book.id }}')" 
+                                class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
+                            <i class="fas fa-times-circle mr-2"></i> Cancel Request
                         </button>
-                        {% elif borrow.renewed_count >= 1 %}
-                        <button disabled class="px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed text-sm">
-                            <i class="fas fa-check-circle mr-2"></i> Already Renewed
-                        </button>
-                        {% elif borrow.is_overdue() %}
-                        <button disabled class="px-4 py-2 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed text-sm">
-                            <i class="fas fa-ban mr-2"></i> Cannot Renew (Overdue)
-                        </button>
+                        
+                        {% elif borrow.status == 'borrowed' %}
+                            {% if not borrow.is_overdue() and borrow.renewed_count < 1 %}
+                            <button onclick="openRenewModal('{{ book.id }}', '{{ book.title|replace("'", "\\'") }}', {{ borrow.renewed_count }})" 
+                                    class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                                <i class="fas fa-redo mr-2"></i> Renew
+                            </button>
+                            {% endif %}
+                            
+                            <div class="text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded border border-gray-200">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                To return, please bring book to the library counter.
+                            </div>
                         {% endif %}
                     </div>
-                    <p class="text-xs text-gray-500 mt-2">
-                        <i class="fas fa-info-circle mr-1"></i>To return this book, please visit the library
-                    </p>
                 </div>
             </div>
         </div>
@@ -144,6 +143,31 @@
 </div>
 
 <script>
+// Cancel borrow request for a specific book (pending_pickup only)
+function cancelBorrow(bookId) {
+    if (!confirm('Are you sure you want to cancel this borrow request?')) {
+        return;
+    }
+
+    fetch(`/api/cancel/${bookId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+        if (data.success) {
+            window.location.reload();
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred. Please try again.');
+    });
+}
+
 let currentBookId = null;
 
 function openRenewModal(bookId, bookTitle, renewedCount) {

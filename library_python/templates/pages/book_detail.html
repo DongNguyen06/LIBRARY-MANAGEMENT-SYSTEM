@@ -283,7 +283,7 @@
                         
                         <!-- Delete button for admin -->
                         {% if current_user and current_user.role == 'admin' and review.user_id != current_user.id %}
-                        <form method="POST" action="{{ url_for('delete_review', review_id=review.id) }}" 
+                        <form method="POST" action="{{ url_for('delete_review', review_id=review.id, book_id=book.id) if review and book else '#' }}" 
                               onsubmit="return confirm('Delete this review?')" class="mt-2">
                             <button type="submit" class="text-xs text-red-600 hover:text-red-800">
                                 <i class="fas fa-trash mr-1"></i>Delete

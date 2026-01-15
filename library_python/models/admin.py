@@ -1,212 +1,97 @@
-"""Admin model module.
+"""Admin model.
 
-This module defines the Admin class for system administrators.
-Admin inherits from Staff (and thus User) and has full system access.
+Inherits from Staff and adds system config capabilities.
 """
-from typing import List, Dict
-from models.database import get_db
-from models.staff import Staff
+from typing import Dict, Tuple
 
+from models.staff import Staff
+from models.system_config import SystemConfig
+from models.system_log import SystemLog
+from models.database import get_db  # <--- Thêm import này để tính toán fines
 
 class Admin(Staff):
-    """Represents a system administrator.
-    
-    Admins have full system access including:
-    - All Staff permissions
-    - Manage books (add, edit, delete)
-    - Manage users (lock, unlock, change roles)
-    - View system logs
-    - System configuration
-    
-    Inherits all attributes and methods from Staff (and User).
-    """
-    
-    def __init__(self, *args, **kwargs):
-        """Initialize an Admin instance."""
-        super().__init__(*args, **kwargs)
-        # Ensure role is set correctly
-        self.role = 'admin'
-    
-    # ==================== ADMIN-SPECIFIC METHODS ====================
-    
-    def add_book(self, **book_data) -> tuple:
-        """Add a new book to the library.
-        
+
+    def save_system_config(self, config_data: Dict) -> Tuple[bool, str]:
+        """Save system configuration.
+
         Args:
-            **book_data: Book attributes (title, author, etc.).
-            
-        Returns:
-            Tuple of (Book or None, message).
-        """
-        from models.book import Book
-        return Book.create(**book_data)
-    
-    def update_book(self, book_id: str, **updates) -> tuple:
-        """Update an existing book.
-        
-        Args:
-            book_id: ID of the book to update.
-            **updates: Fields to update.
-            
+            config_data: Dictionary containing config values.
+
         Returns:
             Tuple of (success, message).
         """
-        from models.book import Book
-        book = Book.get_by_id(book_id)
-        if not book:
-            return False, "Book not found"
-        return book.update_fields(**updates)
-    
-    def delete_book(self, book_id: str) -> tuple:
-        """Delete a book from the library.
-        
-        Args:
-            book_id: ID of the book to delete.
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        from models.book import Book
-        book = Book.get_by_id(book_id)
-        if not book:
-            return False, "Book not found"
-        return book.delete()
-    
-    def lock_user(self, user_id: str) -> tuple:
-        """Lock a user account.
-        
-        Args:
-            user_id: ID of the user to lock.
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        from models.user import User
-        user = User.get_by_id(user_id)
-        if not user:
-            return False, "User not found"
-        if user.role == 'admin':
-            return False, "Cannot lock admin accounts"
-        user.lock()
-        
-        # Log the action
-        from models.system_log import SystemLog
-        SystemLog.add('User Locked', f'Admin {self.name} locked user {user.name}', 'warning', self.id)
-        
-        return True, f"User {user.name} has been locked"
-    
-    def unlock_user(self, user_id: str) -> tuple:
-        """Unlock a user account.
-        
-        Args:
-            user_id: ID of the user to unlock.
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        from models.user import User
-        user = User.get_by_id(user_id)
-        if not user:
-            return False, "User not found"
-        user.unlock()
-        
-        # Log the action
-        from models.system_log import SystemLog
-        SystemLog.add('User Unlocked', f'Admin {self.name} unlocked user {user.name}', 'info', self.id)
-        
-        return True, f"User {user.name} has been unlocked"
-    
-    def change_user_role(self, user_id: str, new_role: str) -> tuple:
-        """Change a user's role.
-        
-        Args:
-            user_id: ID of the user.
-            new_role: New role ('user', 'staff', 'admin').
-            
-        Returns:
-            Tuple of (success, message).
-        """
-        if new_role not in ('user', 'staff', 'admin'):
-            return False, "Invalid role"
-        
-        from models.user import User
-        user = User.get_by_id(user_id)
-        if not user:
-            return False, "User not found"
-        
-        old_role = user.role
-        db = get_db()
-        db.execute('UPDATE users SET role = ? WHERE id = ?', (new_role, user_id))
-        db.commit()
-        
-        # Log the action
-        from models.system_log import SystemLog
+        SystemConfig.update(config_data)
+
+        # Create detailed log
+        details = ", ".join([f"{k}: {v}" for k, v in config_data.items()])
         SystemLog.add(
-            'Role Changed', 
-            f'Admin {self.name} changed {user.name} role from {old_role} to {new_role}',
-            'info', 
+            'Config Update',
+            f'Admin {self.name} updated config: {details}',
+            'admin',
             self.id
         )
-        
-        return True, f"User role changed to {new_role}"
-    
-    def get_system_logs(self, limit: int = 100) -> List:
-        """Get recent system logs.
-        
+
+        return True, "Configuration saved successfully"
+
+    def clear_system_logs(self, days: int) -> Tuple[bool, str]:
+        """Clear old system logs.
+
         Args:
-            limit: Maximum number of logs to return.
-            
+            days: Number of days to keep (delete older than this).
+
         Returns:
-            List of SystemLog instances.
+            Tuple of (success, message).
         """
-        from models.system_log import SystemLog
-        return SystemLog.get_all(limit)
-    
-    def send_broadcast_notification(self, title: str, message: str) -> tuple:
-        """Send notification to all users.
+        try:
+            SystemLog.clear_old_logs(days)
+            SystemLog.add(
+                'Clear Logs',
+                f'Admin {self.name} cleared logs older than {days} days',
+                'admin',
+                self.id
+            )
+            return True, f"Deleted logs older than {days} days"
+        except Exception as e:
+            return False, str(e)
+
+    def get_stats(self) -> Dict[str, any]:
+        """Get dashboard statistics for admin.
         
-        Args:
-            title: Notification title.
-            message: Notification message.
-            
-        Returns:
-            Tuple of (notifications list or None, message).
+        Updated to be compatible with Staff Dashboard as well.
         """
-        from models.notification import Notification
-        return Notification.send_to_all_with_validation(
-            'admin_broadcast', title, message, self.role
-        )
-    
-    def get_dashboard_stats(self) -> Dict:
-        """Get statistics for admin dashboard.
-        
-        Returns:
-            Dictionary with various statistics.
-        """
-        from models.user import User
         from models.book import Book
         from models.borrow import Borrow
+        from models.user import User
         
-        return {
-            'total_users': User.get_total_users(),
-            'total_staff': User.get_users_by_role('staff'),
-            'total_admins': User.get_users_by_role('admin'),
-            'total_books': Book.get_total_count(),
-            'pending_borrows': len(Borrow.get_all_pending()),
-            'overdue_borrows': len(Borrow.get_overdue_borrows())
-        }
-    
-    @staticmethod
-    def get_all_admins() -> List['Admin']:
-        """Get all admin users.
-        
-        Returns:
-            List of Admin instances.
-        """
+        # Calculate total debt (fines) - Logic copied from Staff model
         db = get_db()
-        rows = db.execute(
-            'SELECT id, email, name, phone, birthday, role, member_since, '
-            'is_locked, fines, violations, favorites FROM users WHERE role = ?',
-            ('admin',)
-        ).fetchall()
-        return [Admin(**dict(row)) for row in rows]
+        total_debt_row = db.execute(
+            'SELECT SUM(fines) as total FROM users'
+        ).fetchone()
+        total_debt = total_debt_row['total'] or 0.0
+
+        # Get core metrics
+        active_borrows = Borrow.get_active_borrows_count()
+        overdue_count = Borrow.get_overdue_count()
+        total_users = User.get_total_users()
+        total_books = Book.get_total_count()
+
+        stats = {
+            # --- Admin Dashboard Keys ---
+            'total_books': total_books,
+            'total_users': total_users,
+            'active_borrows': active_borrows,
+            'overdue_count': overdue_count,
+            'total_staff': User.get_users_by_role('staff'),
+            'revenue': 0,  # Placeholder
+
+            # --- Staff Dashboard Compatibility Keys (Aliases) ---
+            # Template staff/dashboard.html expects these specific keys:
+            'fines': total_debt,         # Fixes: 'dict object' has no attribute 'fines'
+            'borrowed': active_borrows,  # Alias for active_borrows
+            'overdue': overdue_count,    # Alias for overdue_count
+            'members': total_users,      # Alias for total_users
+            'unread_messages': 0
+        }
+
+        return stats

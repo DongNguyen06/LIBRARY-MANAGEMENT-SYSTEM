@@ -42,9 +42,19 @@
             </div>
             <p class="text-gray-600">Unpaid Fines</p>
             {% if current_user.fines > 0 %}
-            <a href="{{ url_for('profile') }}" class="text-sm text-blue-600 hover:text-blue-700 mt-2 inline-block">
-                Pay Now →
-            </a>
+            <div class="alert alert-danger d-flex justify-content-between align-items-center">
+                <span>
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    You have an outstanding fine of <strong>${{ "%.2f"|format(current_user.fines) }}</strong>.
+                    You must pay this fine to borrow new books.
+                </span>
+
+                <form action="{{ url_for('pay_fine') }}" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Confirm payment of ${{ '%.2f'|format(current_user.fines) }}?');">
+                        <i class="fas fa-credit-card me-1"></i> Pay Now
+                    </button>
+                </form>
+            </div>
             {% endif %}
         </div>
     </div>

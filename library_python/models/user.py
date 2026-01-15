@@ -1,284 +1,207 @@
 """User model module.
 
-This module defines the User, Staff, and Admin models for managing library members,
-including authentication, favorites, and account management.
-
-Class Hierarchy:
-    User (base class) - Regular library members
-    ├── Staff - Library staff with additional permissions
-    └── Admin - System administrators with full access
+Acts as a Factory for User/Staff/Admin and handles payment logic.
 """
 import json
+import uuid
 from datetime import datetime
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
-from werkzeug.security import generate_password_hash, check_password_hash
-from models.database import get_db
+from typing import Optional, List, Dict, Any, Tuple
+from models.book import Book
+from werkzeug.security import check_password_hash, generate_password_hash
 
+from models.database import get_db
+from models.guest import Guest  # Import chuẩn, đã loại bỏ block try/except dự phòng
 
 class User:
-    """Represents a library user (member, staff, or admin).
-    
-    This class handles user authentication, profile management,
-    favorites tracking, fines, and account status.
-    
-    Attributes:
-        id (str): Unique user identifier.
-        email (str): User's email address (unique).
-        name (str): Full name.
-        phone (str): Contact phone number.
-        birthday (str): Date of birth.
-        role (str): User role ('user', 'staff', 'admin').
-        member_since (str): Registration date.
-        is_locked (bool): Account lock status.
-        fines (float): Outstanding fine amount.
-        violations (int): Number of violations.
-        favorites (List[str]): List of favorite book IDs.
-        password (str): Hashed password (only loaded when needed).
-    """
-    
-    def __init__(self, id: str, email: str, name: str, phone: str,
-                 birthday: str, role: str, member_since: str,
-                 is_locked: int, fines: float, violations: int,
-                 favorites: str, password: Optional[str] = None,
-                 total_fine: float = 0.0, **kwargs) -> None:
-        """Initialize a User instance.
-        
-        Args:
-            id: Unique identifier.
-            email: Email address.
-            name: Full name.
-            phone: Phone number.
-            birthday: Date of birth.
-            role: User role.
-            member_since: Registration date.
-            is_locked: Lock status (0 or 1).
-            fines: Fine amount.
-            violations: Violation count.
-            favorites: JSON string of favorite book IDs.
-            password: Hashed password (optional).
-            total_fine: Total unpaid fines (default: 0.0).
-            **kwargs: Additional fields from database queries (ignored).
-        """
+    def __init__(self, id, email, name, role, fines, favorites, **kwargs):
         self.id = id
         self.email = email
         self.name = name
-        self.phone = phone
-        self.birthday = birthday
         self.role = role
-        self.member_since = member_since
-        self.is_locked = bool(is_locked)
-        self.fines = float(fines)
-        self.violations = int(violations)
-        self.favorites = json.loads(favorites) if isinstance(favorites, str) else favorites
-        self.password = password
-        self.total_fine = float(total_fine)
-    
+        # Xử lý an toàn cho fines
+        self.fines = float(fines) if fines is not None else 0.0
+        # Xử lý an toàn cho favorites
+        if isinstance(favorites, str):
+            try:
+                self.favorites = json.loads(favorites)
+            except:
+                self.favorites = []
+        else:
+            self.favorites = favorites if favorites else []
+            
+        # Các thuộc tính khác từ kwargs
+        self.phone = kwargs.get('phone')
+        self.birthday = kwargs.get('birthday')
+        self.member_since = kwargs.get('member_since')
+        self.is_locked = bool(kwargs.get('is_locked', 0))
+        self.password = kwargs.get('password')
+        self.violations = int(kwargs.get('violations', 0))
+
+    @staticmethod
+    def get_user_or_guest(user_id: Optional[str]) -> 'User':
+        """Get User object or Guest object."""
+        if not user_id:
+            return Guest()
+        user = User.get_by_id(user_id)
+        return user if user else Guest()
+
     @staticmethod
     def get_by_id(user_id: str) -> Optional['User']:
-        """Retrieve a user by their ID.
-        
-        Args:
-            user_id: The unique identifier of the user.
-            
-        Returns:
-            User, Staff, or Admin instance based on role. None if not found.
-        """
+        """Factory Method: Get User, Staff, or Admin instance by ID."""
         db = get_db()
         row = db.execute(
-            'SELECT id, email, name, phone, birthday, role, member_since, '
-            'is_locked, fines, violations, favorites FROM users WHERE id = ?',
+            'SELECT * FROM users WHERE id = ?',
             (user_id,)
         ).fetchone()
-        if row:
-            row_dict = dict(row)
-            # Return appropriate class based on role (lazy import)
-            role = row_dict.get('role', 'user')
-            if role == 'admin':
-                Admin = _get_admin_class()
-                return Admin(**row_dict)
-            elif role == 'staff':
-                Staff = _get_staff_class()
-                return Staff(**row_dict)
-            return User(**row_dict)
-        return None
-    
+        if not row:
+            return None
+        return get_user_by_role(dict(row))
+
     @staticmethod
     def get_by_email(email: str) -> Optional['User']:
-        """Retrieve a user by their email address.
-        
-        Args:
-            email: The email address to search for.
-            
-        Returns:
-            User, Staff, or Admin instance with password if found, None otherwise.
-        """
+        """Get user by email and return correct class (User/Staff/Admin)."""
         db = get_db()
         row = db.execute(
-            'SELECT id, email, name, phone, birthday, role, member_since, '
-            'is_locked, fines, violations, favorites, password FROM users WHERE email = ?',
+            'SELECT * FROM users WHERE email = ?',
             (email,)
         ).fetchone()
-        if row:
-            row_dict = dict(row)
-            # Return appropriate class based on role (lazy import)
-            role = row_dict.get('role', 'user')
-            if role == 'admin':
-                Admin = _get_admin_class()
-                return Admin(**row_dict)
-            elif role == 'staff':
-                Staff = _get_staff_class()
-                return Staff(**row_dict)
-            return User(**row_dict)
+        if not row:
+            return None
+        return get_user_by_role(dict(row))
+
+    @staticmethod
+    def login(email: str, password: str) -> Optional['User']:
+        """Login user with email and password."""
+        user = User.get_by_email(email)
+        if user and not user.is_locked and user.check_password(password):
+            return user
         return None
-    
+
     @staticmethod
     def create(email: str, password: str, name: str, phone: str,
                birthday: Optional[str] = None, role: str = 'user') -> Optional['User']:
-        """Create a new user account.
-        
-        Args:
-            email: Email address (must be unique).
-            password: Plain text password (will be hashed).
-            name: Full name.
-            phone: Phone number.
-            birthday: Date of birth (optional).
-            role: User role (default: 'user').
-            
-        Returns:
-            New User instance if successful, None if email exists.
-        """
-        import uuid
-        db = get_db()
-        
-        # Check if email already exists
+        """Create new user."""
         if User.get_by_email(email):
             return None
-        
+
         user_id = str(uuid.uuid4())
         hashed_password = generate_password_hash(password)
         member_since = datetime.now().strftime('%Y-%m-%d')
-        
+
         try:
+            db = get_db()
             db.execute('''
-                INSERT INTO users (id, email, password, name, phone, birthday, role, 
+                INSERT INTO users (id, email, password, name, phone, birthday, role,
                                  member_since, is_locked, fines, violations, favorites)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0.0, 0, '[]')
-            ''', (user_id, email, hashed_password, name, phone, birthday, role, member_since))
+            ''', (user_id, email, hashed_password, name, phone, birthday, role,
+                  member_since))
             db.commit()
-            
+
             return User.get_by_id(user_id)
         except Exception as e:
             print(f"Error creating user: {e}")
             return None
-    
-    def update(self, name: Optional[str] = None, phone: Optional[str] = None,
-               birthday: Optional[str] = None) -> bool:
-        """Update user profile information.
-        
-        Args:
-            name: New name (optional).
-            phone: New phone number (optional).
-            birthday: New birthday (optional).
-            
-        Returns:
-            True if update successful.
-        """
+
+    def update(self, name=None, phone=None, birthday=None) -> Tuple[bool, str]:
+        """Update user profile information."""
         db = get_db()
-        
         if name:
             self.name = name
         if phone:
             self.phone = phone
         if birthday:
             self.birthday = birthday
-        
-        db.execute('''
-            UPDATE users SET name = ?, phone = ?, birthday = ?
-            WHERE id = ?
-        ''', (self.name, self.phone, self.birthday, self.id))
-        db.commit()
-        return True
-    
+
+        try:
+            db.execute(
+                'UPDATE users SET name=?, phone=?, birthday=? WHERE id=?',
+                (self.name, self.phone, self.birthday, self.id)
+            )
+            db.commit()
+            return True, "Profile updated successfully"
+        except Exception as e:
+            return False, f"Failed to update profile: {str(e)}"
+
     def check_password(self, password: str) -> bool:
-        """Verify if the provided password is correct.
-        
-        Args:
-            password: Plain text password to verify.
-            
-        Returns:
-            True if password matches, False otherwise.
-        """
+        """Check if provided password matches user password."""
         if not self.password:
             return False
         return check_password_hash(self.password, password)
-    
-    def add_favorite(self, book_id: str) -> bool:
-        """Add a book to user's favorites list.
-        
-        Args:
-            book_id: ID of the book to add.
-            
-        Returns:
-            True if added, False if already in favorites.
-        """
-        if book_id not in self.favorites:
-            self.favorites.append(book_id)
-            db = get_db()
+
+    def pay_fine(self, amount: float) -> Tuple[bool, str]:
+        """Pay fine amount."""
+        if amount <= 0 or self.fines <= 0:
+            return False, "No fines to pay or invalid amount"
+
+        pay_amount = min(self.fines, float(amount))
+        self.fines -= pay_amount
+
+        db = get_db()
+        try:
             db.execute(
-                'UPDATE users SET favorites = ? WHERE id = ?',
-                (json.dumps(self.favorites), self.id)
+                'UPDATE users SET fines = ? WHERE id = ?',
+                (self.fines, self.id)
+            )
+
+            # Unlock account if debt cleared
+            if self.fines == 0 and self.is_locked:
+                self.unlock()
+
+            # Update violation history if table exists
+            try:
+                db.execute(
+                    "UPDATE violations_history SET payment_status = 'paid' "
+                    "WHERE user_id = ?",
+                    (self.id,)
+                )
+            except Exception:
+                pass  # Table may not exist
+
+            db.commit()
+            return True, f"Paid {pay_amount:,.0f} VND. Remaining: {self.fines:,.0f} VND"
+        except Exception as e:
+            return False, f"Payment failed: {str(e)}"
+
+    def lock(self) -> None:
+        """Lock user account."""
+        self.is_locked = True
+        db = get_db()
+        db.execute('UPDATE users SET is_locked = 1 WHERE id = ?', (self.id,))
+        db.commit()
+
+    def unlock(self) -> None:
+        """Unlock user account."""
+        self.is_locked = False
+        db = get_db()
+        db.execute('UPDATE users SET is_locked = 0 WHERE id = ?', (self.id,))
+        db.commit()
+
+    def reset_password(self, new_password: str) -> Tuple[bool, str]:
+        """Reset user password."""
+        from werkzeug.security import generate_password_hash
+
+        try:
+            db = get_db()
+            hashed_password = generate_password_hash(new_password)
+            db.execute(
+                'UPDATE users SET password = ? WHERE id = ?',
+                (hashed_password, self.id)
             )
             db.commit()
-            return True
-        return False
-    
-    def remove_favorite(self, book_id: str) -> bool:
-        """Remove a book from user's favorites list.
-        
-        Args:
-            book_id: ID of the book to remove.
-            
-        Returns:
-            True if removed, False if not in favorites.
-        """
-        if book_id in self.favorites:
-            self.favorites.remove(book_id)
-            db = get_db()
-            db.execute(
-                'UPDATE users SET favorites = ? WHERE id = ?',
-                (json.dumps(self.favorites), self.id)
-            )
-            db.commit()
-            return True
-        return False
-    
+            return True, "Password reset successful"
+        except Exception as e:
+            return False, f"Password reset failed: {str(e)}"
+
     def add_fine(self, amount: float) -> None:
-        """Add a fine amount to user's account.
-        
-        Args:
-            amount: Fine amount to add.
-        """
-        self.fines += amount
+        """Add fine amount to user account."""
+        self.fines += float(amount)
         db = get_db()
         db.execute('UPDATE users SET fines = ? WHERE id = ?', (self.fines, self.id))
         db.commit()
-    
-    def pay_fine(self, amount: float) -> None:
-        """Pay/reduce user's fine amount.
-        
-        Args:
-            amount: Amount to pay (cannot go below 0).
-        """
-        self.fines = max(0, self.fines - amount)
-        db = get_db()
-        db.execute('UPDATE users SET fines = ? WHERE id = ?', (self.fines, self.id))
-        db.commit()
-    
-    def add_fine_record(self) -> None:
-        """Increment fine count by 1.
-        
-        Automatically locks account if fines exceed threshold.
-        """
+
+    def add_violation(self) -> None:
+        """Increment violation count for user."""
         self.violations += 1
         db = get_db()
         db.execute(
@@ -286,257 +209,142 @@ class User:
             (self.violations, self.id)
         )
         db.commit()
-        
-        # Check if user should be locked
-        from config.config import Config
-        if self.violations >= Config.MAX_VIOLATIONS_BEFORE_LOCK:
-            self.lock()
+
+    def can_manage_borrows(self) -> bool:
+        """Check if user can manage borrows (staff or admin)."""
+        return self.is_staff()
+
+    def is_admin(self) -> bool:
+        """Check if user is admin."""
+        return self.role == 'admin'
+
+    def is_staff(self) -> bool:
+        """Check if user is staff or admin."""
+        return self.role in ['staff', 'admin']
     
-    # Alias for backward compatibility
-    add_violation = add_fine_record
-    
-    def lock(self) -> None:
-        """Lock the user account (prevent login and borrowing)."""
-        self.is_locked = True
-        db = get_db()
-        db.execute('UPDATE users SET is_locked = 1 WHERE id = ?', (self.id,))
-        db.commit()
-    
-    def unlock(self) -> None:
-        """Unlock the user account (restore access)."""
-        self.is_locked = False
-        db = get_db()
-        db.execute('UPDATE users SET is_locked = 0 WHERE id = ?', (self.id,))
-        db.commit()
-    
-    @staticmethod
-    def get_total_users() -> int:
-        """Get total count of regular users.
-        
-        Returns:
-            Number of users with 'user' role.
-        """
-        db = get_db()
-        row = db.execute(
-            'SELECT COUNT(*) as count FROM users WHERE role = "user"'
-        ).fetchone()
-        return row['count']
-    
-    @staticmethod
-    def get_users_by_role(role: str) -> int:
-        """Get count of users with specific role.
-        
-        Args:
-            role: The role to count ('user', 'staff', 'admin').
-            
-        Returns:
-            Number of users with specified role.
-        """
-        db = get_db()
-        row = db.execute(
-            'SELECT COUNT(*) as count FROM users WHERE role = ?',
-            (role,)
-        ).fetchone()
-        return row['count']
-    
-    @staticmethod
-    def get_all_users() -> List['User']:
-        """Retrieve all users from database.
-        
-        Returns:
-            List of User, Staff, or Admin instances based on role.
-        """
-        db = get_db()
-        rows = db.execute(
-            'SELECT id, email, name, phone, birthday, role, member_since, '
-            'is_locked, fines, violations, favorites FROM users'
-        ).fetchall()
-        
-        # Lazy import to avoid circular imports
-        Staff = _get_staff_class()
-        Admin = _get_admin_class()
-        
-        result = []
-        for row in rows:
-            row_dict = dict(row)
-            role = row_dict.get('role', 'user')
-            if role == 'admin':
-                result.append(Admin(**row_dict))
-            elif role == 'staff':
-                result.append(Staff(**row_dict))
-            else:
-                result.append(User(**row_dict))
-        return result
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert user to dictionary representation.
-        
-        Note: Does not include password for security.
-        
-        Returns:
-            Dictionary containing all user attributes (except password).
-        """
-        return {
-            'id': self.id,
-            'email': self.email,
-            'name': self.name,
-            'phone': self.phone,
-            'birthday': self.birthday,
-            'role': self.role,
-            'member_since': self.member_since,
-            'is_locked': self.is_locked,
-            'fines': self.fines,
-            'violations': self.violations,
-            'favorites': self.favorites
-        }
-    
-    # ==================== SERVICE METHODS (Merged from AuthService) ====================
-    
-    @staticmethod
-    def login(email: str, password: str) -> Optional['User']:
-        """Authenticate user with email and password.
-        
-        Args:
-            email: User's email address.
-            password: Plain text password to verify.
-            
-        Returns:
-            User instance if authentication successful, None otherwise.
-        """
-        user = User.get_by_email(email)
-        
-        if not user:
-            return None
-        
-        if user.is_locked:
-            return None
-        
-        if user.check_password(password):
-            return user
-        
-        return None
-    
-    @staticmethod
-    def reset_password(email: str, new_password: str) -> bool:
-        """Reset user password.
-        
-        Args:
-            email: User's email address.
-            new_password: New plain text password (will be hashed).
-            
-        Returns:
-            True if password reset successful, False if user not found.
-        """
-        user = User.get_by_email(email)
-        if user:
-            hashed_password = generate_password_hash(new_password)
-            db = get_db()
-            db.execute(
-                'UPDATE users SET password = ? WHERE id = ?',
-                (hashed_password, user.id)
-            )
-            db.commit()
+    def get_favorite_books(self) -> List['Book']:
+        """Get list of favorite books."""
+        from models.book import Book
+        return [Book.get_by_id(bid) for bid in self.favorites
+                if Book.get_by_id(bid)]
+
+    def add_favorite(self, book_id: str) -> bool:
+        """Add book to favorites."""
+        if book_id not in self.favorites:
+            self.favorites.append(book_id)
+            self._save_favorites()
             return True
         return False
-    
-    def get_favorite_books(self) -> List:
-        """Get user's favorite books.
-        
-        Returns:
-            List of favorite Book instances.
-        """
-        from models.book import Book
-        favorites = []
-        for book_id in self.favorites:
-            book = Book.get_by_id(book_id)
-            if book:
-                favorites.append(book)
-        return favorites
-    
-    # ==================== PERMISSION CHECK METHODS ====================
-    
-    def is_staff(self) -> bool:
-        """Check if user has staff privileges.
-        
-        Returns:
-            True if user is staff or admin.
-        """
-        return self.role in ('staff', 'admin')
-    
-    def is_admin(self) -> bool:
-        """Check if user has admin privileges.
-        
-        Returns:
-            True if user is admin.
-        """
-        return self.role == 'admin'
-    
-    def can_manage_borrows(self) -> bool:
-        """Check if user can manage borrow requests.
-        
-        Returns:
-            True if staff or admin.
-        """
-        return self.is_staff()
-    
-    def can_manage_users(self) -> bool:
-        """Check if user can manage other users.
-        
-        Returns:
-            True if admin only.
-        """
-        return self.is_admin()
-    
-    def can_manage_books(self) -> bool:
-        """Check if user can add/edit/delete books.
-        
-        Returns:
-            True if admin only.
-        """
-        return self.is_admin()
-    
-    def can_send_notifications(self) -> bool:
-        """Check if user can send system notifications.
-        
-        Returns:
-            True if staff or admin.
-        """
-        return self.is_staff()
-    
-    def can_view_system_logs(self) -> bool:
-        """Check if user can view system logs.
-        
-        Returns:
-            True if admin only.
-        """
-        return self.is_admin()
 
+    def remove_favorite(self, book_id: str) -> bool:
+        """Remove book from favorites."""
+        if book_id in self.favorites:
+            self.favorites.remove(book_id)
+            self._save_favorites()
+            return True
+        return False
 
-# ==================== HELPER FUNCTIONS ====================
+    def _save_favorites(self) -> None:
+        """Save favorites to database."""
+        db = get_db()
+        db.execute(
+            'UPDATE users SET favorites = ? WHERE id = ?',
+            (json.dumps(self.favorites), self.id)
+        )
+        db.commit()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert user to dictionary."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'role': self.role,
+            'fines': self.fines,
+            'is_locked': self.is_locked
+        }
+
+    @staticmethod
+    def get_total_users() -> int:
+        """Get total count of regular users."""
+        db = get_db()
+        return db.execute(
+            'SELECT COUNT(*) as c FROM users WHERE role="user"'
+        ).fetchone()['c']
+
+    @staticmethod
+    def get_users_by_role(role: str) -> int:
+        """Get count of users by role."""
+        db = get_db()
+        return db.execute(
+            'SELECT COUNT(*) as c FROM users WHERE role=?',
+            (role,)
+        ).fetchone()['c']
+
+    @staticmethod
+    def get_all_users() -> List['User']:
+        """Get all users (for API/Admin)."""
+        db = get_db()
+        rows = db.execute('SELECT * FROM users').fetchall()
+        return [get_user_by_role(dict(r)) for r in rows]
+
+    def get_book_interaction_status(self, book_id: str, book_obj=None) -> dict:
+        """
+        Kiểm tra toàn bộ trạng thái tương tác giữa User và Book.
+        Trả về dict chứa tất cả flags cần thiết cho template.
+        """
+        from models.borrow import Borrow
+        from models.review import Review
+        # from models.reservation import Reservation (Not used directly here but implied)
+
+        status = {
+            'is_favorite': book_id in self.favorites,
+            'can_borrow': False,
+            'can_reserve': False,
+            'is_borrowed': False,
+            'is_reserved': False,
+            'can_review': False,
+            'user_review': None
+        }
+
+        active_borrows = Borrow.get_active_borrows(self.id)
+        reserved_books = Borrow.get_user_reserved_books(self.id)
+
+        status['is_borrowed'] = any(b.book_id == book_id for b in active_borrows)
+        status['is_reserved'] = any(r.book_id == book_id for r in reserved_books)
+
+        if not status['is_borrowed'] and not status['is_reserved'] and book_obj:
+            if book_obj.available_copies > 0:
+                status['can_borrow'] = True
+            else:
+                status['can_reserve'] = True
+
+        reviews = Review.get_by_book(book_id)
+        status['can_review'] = not any(r.user_id == self.id for r in reviews)
+
+        if not status['can_review']:
+            my_reviews = [r for r in reviews if r.user_id == self.id]
+            # Convert object to dict for template if needed, or keep object
+            # Original code expected dict from 'get_book_reviews_with_details'
+            # Here we provide the object, template should handle 'r.comment' etc.
+            status['user_review'] = my_reviews[0].to_dict() if my_reviews else None
+
+        return status
+
+# ==================== HELPER FUNCTIONS (Factory Logic) ====================
 
 def _get_staff_class():
-    """Lazy import Staff class to avoid circular imports."""
     from models.staff import Staff
     return Staff
 
-
 def _get_admin_class():
-    """Lazy import Admin class to avoid circular imports."""
     from models.admin import Admin
     return Admin
 
-
-def get_user_by_role(row_data: dict) -> 'User':
-    """Factory function to create appropriate User subclass based on role.
-    
-    Args:
-        row_data: Dictionary containing user data from database.
-        
-    Returns:
-        User, Staff, or Admin instance based on role.
-    """
+def get_user_by_role(row_data: dict) -> User:
+    """Factory function to create correct User subclass."""
     role = row_data.get('role', 'user')
-    
+
     if role == 'admin':
         Admin = _get_admin_class()
         return Admin(**row_data)

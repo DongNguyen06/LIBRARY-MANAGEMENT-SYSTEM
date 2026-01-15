@@ -228,6 +228,18 @@ class Reservation:
         
         return [Reservation(**dict(row)) for row in rows]
     
+    @staticmethod
+    def get_ready_reservations_for_book(book_id: str) -> List['Reservation']:
+        """Get all reservations marked as 'ready' for a specific book."""
+        db = get_db()
+        rows = db.execute('''
+            SELECT * FROM reservations
+            WHERE book_id = ? AND status = 'ready'
+            ORDER BY notified_date ASC
+        ''', (book_id,)).fetchall()
+
+        return [Reservation(**dict(row)) for row in rows]
+    
     def mark_ready(self, hold_hours: int = 48) -> Tuple[bool, str]:
         """Mark reservation as ready for pickup.
         
@@ -320,6 +332,22 @@ class Reservation:
         db.commit()
         
         return True, "Reservation marked as expired"
+    
+    def complete(self) -> Tuple[bool, str]:
+        """Mark reservation as completed (book borrowed)."""
+        if self.status != 'ready':
+            return False, "Only ready reservations can be completed"
+
+        db = get_db()
+        self.status = 'completed'
+
+        db.execute(
+            'UPDATE reservations SET status = ? WHERE id = ?',
+            ('completed', self.id)
+        )
+        db.commit()
+
+        return True, "Reservation completed"
     
     def get_book(self) -> Optional[Book]:
         """Get the book associated with this reservation."""

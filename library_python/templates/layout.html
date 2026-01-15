@@ -311,314 +311,175 @@
     </div>
     
     <script>
-        // Socket.IO connection
-        const socket = io();
+        // --- SINGLETON SOCKET CONNECTION ---
+        // Sử dụng chung 1 kết nối cho cả Widget và trang Chat riêng
+        if (!window.socket) {
+            window.socket = io();
+        }
+        const socket = window.socket;
+        
+        const currentUserId = '{{ current_user.id }}';
         let currentChatPartner = null;
         let isTyping = false;
         let typingTimeout = null;
         
-        // Connect to Socket.IO
-        socket.on('connect', function() {
-            console.log('✅ Socket.IO connected');
-        });
+        socket.on('connect', () => console.log('✅ Widget Socket connected'));
         
-        socket.on('disconnect', function() {
-            console.warn('⚠️ Socket.IO disconnected');
-        });
-        
-        socket.on('error', function(data) {
-            console.error('❌ Socket.IO error:', data);
-            alert('Error: ' + (data.message || 'Connection error'));
-        });
-        
-        // Handle incoming messages
+        // --- XỬ LÝ TIN NHẮN ĐẾN ---
         socket.on('new_message', function(data) {
-            console.log('New message:', data);
-            
-            // Update chat if it's from current partner
+            // 1. QUAN TRỌNG: Nếu tin nhắn là do mình gửi -> BỎ QUA (vì đã hiển thị ngay lập tức ở client rồi)
+            if (data.sender_id === currentUserId) return;
+
+            // 2. Nếu tin nhắn từ người đang chat trong Widget -> Hiện lên
             if (currentChatPartner && data.sender_id === currentChatPartner) {
                 appendMessage(data);
             }
-            
-            // Update unread badge
             updateUnreadCount();
         });
         
-        // Handle message sent confirmation
-        socket.on('message_sent', function(data) {
-            console.log('Message sent confirmation:', data);
-            appendMessage(data);
-            // Input already cleared in sendMessage() for immediate feedback
-        });
-        
-        // Handle typing indicator
         socket.on('user_typing', function(data) {
             if (currentChatPartner && data.user_id === currentChatPartner) {
                 const indicator = document.getElementById('typingIndicator');
-                if (data.is_typing) {
-                    indicator.classList.remove('hidden');
-                } else {
-                    indicator.classList.add('hidden');
-                }
+                if (data.is_typing) indicator.classList.remove('hidden');
+                else indicator.classList.add('hidden');
             }
         });
         
-        // Open chat window
+        // --- CHAT LOGIC ---
         function openChatWindow() {
             document.getElementById('chatWidget').classList.remove('hidden');
-            {% if current_user.role == 'user' %}
-            loadStaffList();
-            {% else %}
-            loadConversationsList();
-            {% endif %}
+            {% if current_user.role == 'user' %} loadStaffList(); {% else %} loadConversationsList(); {% endif %}
             updateUnreadCount();
         }
         
-        // Close chat window
         function closeChatWindow() {
             document.getElementById('chatWidget').classList.add('hidden');
             currentChatPartner = null;
-            
-            // Show list view again
-            {% if current_user.role == 'user' %}
-            document.getElementById('staffList').classList.remove('hidden');
-            {% else %}
-            document.getElementById('conversationsList').classList.remove('hidden');
-            {% endif %}
+            {% if current_user.role == 'user' %} document.getElementById('staffList').classList.remove('hidden'); {% else %} document.getElementById('conversationsList').classList.remove('hidden'); {% endif %}
             document.getElementById('chatMessages').classList.add('hidden');
             document.getElementById('chatInput').classList.add('hidden');
         }
         
-        // Load staff list for users
-        {% if current_user.role == 'user' %}
-        function loadStaffList() {
-            fetch('/api/chat/staff')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const content = document.getElementById('staffListContent');
-                        content.innerHTML = '';
-                        
-                        data.staff.forEach(staff => {
-                            const div = document.createElement('div');
-                            div.className = 'p-3 border rounded-lg hover:bg-blue-50 cursor-pointer';
-                            div.onclick = () => startChat(staff.id, staff.name);
-                            div.innerHTML = `
-                                <div class="flex items-center gap-2">
-                                    <i class="fas fa-user-circle text-2xl text-blue-600"></i>
-                                    <div>
-                                        <div class="font-medium text-gray-900">${staff.name}</div>
-                                        <div class="text-xs text-gray-500">${staff.email}</div>
-                                    </div>
-                                </div>
-                            `;
-                            content.appendChild(div);
-                        });
-                    }
-                });
-        }
-        {% endif %}
-        
-        // Load conversations list for staff/admin
-        {% if current_user.role in ['staff', 'admin'] %}
-        function loadConversationsList() {
-            fetch('/api/chat/conversations')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const content = document.getElementById('conversationsListContent');
-                        content.innerHTML = '';
-                        
-                        if (data.conversations.length === 0) {
-                            content.innerHTML = '<p class="text-center text-gray-500 py-4">No conversations yet</p>';
-                            return;
-                        }
-                        
-                        data.conversations.forEach(conv => {
-                            const div = document.createElement('div');
-                            div.className = 'p-3 border rounded-lg hover:bg-blue-50 cursor-pointer relative';
-                            div.onclick = () => startChat(conv.partner_id, conv.partner_name);
-                            
-                            const unreadBadge = conv.unread_count > 0 ? 
-                                `<span class="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">${conv.unread_count}</span>` : '';
-                            
-                            div.innerHTML = `
-                                ${unreadBadge}
-                                <div class="flex items-center gap-2">
-                                    <i class="fas fa-user-circle text-2xl text-blue-600"></i>
-                                    <div class="flex-1">
-                                        <div class="font-medium text-gray-900">${conv.partner_name}</div>
-                                        <div class="text-xs text-gray-500 truncate">${conv.last_message}</div>
-                                    </div>
-                                </div>
-                            `;
-                            content.appendChild(div);
-                        });
-                    }
-                });
-        }
-        {% endif %}
-        
-        // Start chat with a partner
-        function startChat(partnerId, partnerName) {
-            currentChatPartner = partnerId;
-            document.getElementById('chatPartnerName').textContent = partnerName;
-            
-            {% if current_user.role == 'user' %}
-            document.getElementById('staffList').classList.add('hidden');
-            {% else %}
-            document.getElementById('conversationsList').classList.add('hidden');
-            {% endif %}
-            document.getElementById('chatMessages').classList.remove('hidden');
-            document.getElementById('chatInput').classList.remove('hidden');
-            
-            loadMessages(partnerId);
-        }
-        
-        // Load messages
-        function loadMessages(partnerId) {
-            fetch(`/api/chat/messages/${partnerId}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        const container = document.getElementById('chatMessages');
-                        container.innerHTML = '';
-                        
-                        data.messages.forEach(msg => {
-                            appendMessage(msg);
-                        });
-                        
-                        // Scroll to bottom
-                        container.scrollTop = container.scrollHeight;
-                    }
-                });
-        }
-        
-        // Append message to chat
-        function appendMessage(msg) {
-            const container = document.getElementById('chatMessages');
-            const isOwn = msg.sender_id === '{{ current_user.id }}';
-            
-            const div = document.createElement('div');
-            div.className = `flex ${isOwn ? 'justify-end' : 'justify-start'}`;
-            div.innerHTML = `
-                <div class="max-w-[70%] ${isOwn ? 'bg-blue-600 text-white' : 'bg-white text-gray-900'} rounded-lg p-3 shadow">
-                    <p class="text-sm">${escapeHtml(msg.message)}</p>
-                    <p class="text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'} mt-1">
-                        ${formatTime(msg.timestamp)}
-                    </p>
-                </div>
-            `;
-            
-            container.appendChild(div);
-            container.scrollTop = container.scrollHeight;
-        }
-        
-        // Send message
+        // --- GỬI TIN NHẮN VỚI OPTIMISTIC UI ---
         function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
             
-            if (!message) {
-                console.warn('Empty message');
-                return;
-            }
+            if (!message || !currentChatPartner) return;
             
-            if (!currentChatPartner) {
-                console.error('No chat partner selected');
-                alert('Please select someone to chat with first');
-                return;
-            }
-            
-            // Clear input immediately for better UX
-            input.value = '';
-            
-            // Send message via Socket.IO
+            // 1. Gửi lên server
             socket.emit('send_message', {
                 receiver_id: currentChatPartner,
                 message: message
             });
+
+            // 2. HIỆN NGAY LẬP TỨC (Không chờ server)
+            appendMessage({
+                sender_id: currentUserId,
+                message: message,
+                timestamp: new Date().toISOString() // Giả lập thời gian
+            });
+            
+            input.value = '';
         }
-        
-        // Handle Enter key
-        function handleMessageKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            } else {
-                // Send typing indicator
-                if (!isTyping) {
-                    isTyping = true;
-                    socket.emit('typing', {
-                        receiver_id: currentChatPartner,
-                        is_typing: true
+
+        function appendMessage(msg) {
+            const container = document.getElementById('chatMessages');
+            const isOwn = msg.sender_id === currentUserId;
+            
+            // Xử lý hiển thị thời gian
+            let timeDisplay = 'Just now';
+            if (msg.timestamp) {
+                const date = new Date(msg.timestamp);
+                if (!isNaN(date)) {
+                    timeDisplay = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                }
+            }
+
+            const div = document.createElement('div');
+            div.className = `flex ${isOwn ? 'justify-end' : 'justify-start'}`;
+            div.innerHTML = `
+                <div class="max-w-[70%] ${isOwn ? 'bg-blue-600 text-white' : 'bg-white text-gray-900'} rounded-lg p-3 shadow">
+                    <p class="text-sm break-words">${escapeHtml(msg.message)}</p>
+                    <p class="text-xs ${isOwn ? 'text-blue-100' : 'text-gray-500'} mt-1 text-right">${timeDisplay}</p>
+                </div>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // --- CÁC HÀM API KHÁC (Load lists...) ---
+        // (Giữ gọn code, logic loadStaffList/loadConversationsList tương tự như cũ nhưng gọi appendMessage mới)
+        {% if current_user.role == 'user' %}
+        function loadStaffList() {
+            fetch('/api/chat/staff').then(r=>r.json()).then(d=>{
+                if(d.success) {
+                    const c = document.getElementById('staffListContent'); c.innerHTML='';
+                    d.staff.forEach(s => {
+                        const el = document.createElement('div');
+                        el.className='p-3 border rounded hover:bg-gray-50 cursor-pointer';
+                        el.innerHTML=`<div class="font-medium">${s.name}</div>`;
+                        el.onclick=()=>startChat(s.id, s.name);
+                        c.appendChild(el);
                     });
                 }
-                
-                clearTimeout(typingTimeout);
-                typingTimeout = setTimeout(() => {
-                    isTyping = false;
-                    socket.emit('typing', {
-                        receiver_id: currentChatPartner,
-                        is_typing: false
+            });
+        }
+        {% else %}
+        function loadConversationsList() {
+             fetch('/api/chat/conversations').then(r=>r.json()).then(d=>{
+                if(d.success) {
+                    const c = document.getElementById('conversationsListContent'); c.innerHTML='';
+                    d.conversations.forEach(cv => {
+                        const el = document.createElement('div');
+                        el.className='p-3 border rounded hover:bg-gray-50 cursor-pointer relative';
+                        el.innerHTML=`<div class="font-medium">${cv.partner_name}</div><div class="text-xs text-gray-500 truncate">${cv.last_message||''}</div>`;
+                        if(cv.unread_count>0) el.innerHTML+=`<span class="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 rounded-full">${cv.unread_count}</span>`;
+                        el.onclick=()=>startChat(cv.partner_id, cv.partner_name);
+                        c.appendChild(el);
                     });
-                }, 1000);
+                }
+            });
+        }
+        {% endif %}
+
+        function startChat(pid, pname) {
+            currentChatPartner = pid;
+            document.getElementById('chatPartnerName').textContent = pname;
+            {% if current_user.role == 'user' %} document.getElementById('staffList').classList.add('hidden'); {% else %} document.getElementById('conversationsList').classList.add('hidden'); {% endif %}
+            document.getElementById('chatMessages').classList.remove('hidden');
+            document.getElementById('chatInput').classList.remove('hidden');
+            
+            const container = document.getElementById('chatMessages'); container.innerHTML = '';
+            fetch(`/api/chat/messages/${pid}`).then(r=>r.json()).then(d=>{
+                if(d.success) {
+                    d.messages.forEach(appendMessage);
+                }
+            });
+        }
+
+        function handleMessageKeyPress(e) {
+            if(e.key==='Enter') sendMessage();
+            else {
+                if(!isTyping){ isTyping=true; socket.emit('typing', {receiver_id: currentChatPartner, is_typing: true}); }
+                clearTimeout(typingTimeout);
+                typingTimeout=setTimeout(()=>{isTyping=false; socket.emit('typing', {receiver_id: currentChatPartner, is_typing: false});}, 1000);
             }
         }
-        
-        // Update unread count
+
         function updateUnreadCount() {
-            fetch('/api/chat/unread')
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        // Update badge for users (in dropdown)
-                        const badgeDropdown = document.getElementById('chatBadgeDropdown');
-                        if (badgeDropdown) {
-                            if (data.count > 0) {
-                                badgeDropdown.textContent = data.count;
-                                badgeDropdown.classList.remove('hidden');
-                            } else {
-                                badgeDropdown.classList.add('hidden');
-                            }
-                        }
-                        
-                        // Update badge for staff/admin (icon next to profile)
-                        const badgeIcon = document.getElementById('chatBadgeIcon');
-                        if (badgeIcon) {
-                            if (data.count > 0) {
-                                badgeIcon.textContent = data.count;
-                                badgeIcon.classList.remove('hidden');
-                            } else {
-                                badgeIcon.classList.add('hidden');
-                            }
-                        }
-                    }
-                });
+            fetch('/api/chat/unread').then(r=>r.json()).then(d=>{
+                if(d.success) {
+                    const b1 = document.getElementById('chatBadgeIcon');
+                    if(b1) { b1.textContent=d.count; d.count>0?b1.classList.remove('hidden'):b1.classList.add('hidden'); }
+                }
+            }).catch(()=>{});
         }
+
+        function escapeHtml(t) { return t?t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"):"" }
         
-        // Utility functions
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        function formatTime(timestamp) {
-            const date = new Date(timestamp);
-            const now = new Date();
-            const diffMs = now - date;
-            const diffMins = Math.floor(diffMs / 60000);
-            
-            if (diffMins < 1) return 'Just now';
-            if (diffMins < 60) return `${diffMins}m ago`;
-            if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-            
-            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        }
-        
-        // Load unread count on page load for all roles
         updateUnreadCount();
-        setInterval(updateUnreadCount, 30000); // Update every 30 seconds
+        setInterval(updateUnreadCount, 30000);
     </script>
     {% endif %}
     

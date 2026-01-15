@@ -24,27 +24,24 @@
 
 <script>
     // SocketIO connection for real-time notifications
-    const socket = io();
-
-    socket.on('connect', () => {
-        console.log('✅ Connected for real-time notifications');
-    });
-
-    // Listen for new notifications
-    socket.on('new_notification', (notification) => {
-        console.log('🔔 New notification received:', notification);
-        loadNotifications();
-        showNotificationToast(notification);
-    });
+    if (typeof socket !== 'undefined') {
+        socket.on('new_notification', (notification) => {
+            console.log('🔔 New notification received:', notification);
+            loadNotifications();
+            showNotificationToast(notification);
+        });
+    }
 
     // Load notifications
     async function loadNotifications() {
         try {
+            // Updated endpoint '/api/notifications' to ensure it is correctly handled in app.py
             const response = await fetch('/api/notifications');
+            if (!response.ok) throw new Error('Network response was not ok');
+
             const data = await response.json();
-            
             const list = document.getElementById('notificationsList');
-            
+
             if (data.success && data.notifications.length > 0) {
                 list.innerHTML = data.notifications.map(notif => {
                     const typeIcons = {
@@ -53,13 +50,12 @@
                         'success': 'fa-check-circle text-green-500',
                         'urgent': 'fa-bell text-red-500'
                     };
-                    
                     const icon = typeIcons[notif.type] || typeIcons['info'];
-                    
+
                     return `
-                        <div class="p-4 hover:bg-gray-50 ${notif.is_read ? 'bg-white' : 'bg-blue-50'}" data-notif-id="${notif.id}">
+                        <div class="p-4 hover:bg-gray-50 ${notif.is_read ? 'bg-white' : 'bg-blue-50'}" id="notif-${notif.id}">
                             <div class="flex items-start gap-4">
-                                <div class="flex-shrink-0">
+                                <div class="flex-shrink-0 mt-1">
                                     <i class="fas ${icon} text-2xl"></i>
                                 </div>
                                 <div class="flex-1 min-w-0">
@@ -70,11 +66,11 @@
                                 <div class="flex gap-2">
                                     ${!notif.is_read ? `
                                         <button onclick="markAsRead('${notif.id}')" class="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
-                                            <i class="fas fa-check"></i> Mark Read
+                                            <i class="fas fa-check"></i> Read
                                         </button>
                                     ` : ''}
                                     <button onclick="deleteNotification('${notif.id}')" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200">
-                                        <i class="fas fa-trash"></i> Delete
+                                        <i class="fas fa-trash"></i>
                                     </button>
                                 </div>
                             </div>
@@ -92,6 +88,11 @@
             }
         } catch (error) {
             console.error('Failed to load notifications:', error);
+            document.getElementById('notificationsList').innerHTML = `
+                <div class="p-8 text-center text-red-500">
+                    <p>Failed to load notifications.</p>
+                </div>
+            `;
         }
     }
 

@@ -4,40 +4,226 @@
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <h1 class="text-3xl font-bold text-gray-900 mb-8">Chat</h1>
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">Chat Support</h1>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 h-[600px]">
-        <!-- Conversations List -->
-        <div class="bg-white rounded-lg shadow-sm overflow-y-auto">
+        <div class="bg-white rounded-lg shadow-sm flex flex-col h-full">
             <div class="p-4 border-b">
-                <h2 class="font-semibold text-gray-900">Conversations</h2>
+                <h2 class="font-semibold text-gray-900">
+                    {% if current_user.role == 'user' %}
+                        Available Staff
+                    {% else %}
+                        Recent Conversations
+                    {% endif %}
+                </h2>
             </div>
-            <div class="p-4">
-                <p class="text-gray-600 text-center">No conversations yet</p>
+            <div id="conversations-list" class="flex-1 overflow-y-auto p-2 space-y-2">
+                <p class="text-center text-gray-500 py-4">Loading...</p>
             </div>
         </div>
 
-        <!-- Chat Area -->
-        <div class="md:col-span-2 bg-white rounded-lg shadow-sm flex flex-col">
-            <div class="p-4 border-b">
-                <h2 class="font-semibold text-gray-900">Select a conversation</h2>
+        <div class="md:col-span-2 bg-white rounded-lg shadow-sm flex flex-col h-full">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
+                <h2 class="font-semibold text-gray-900" id="chat-header">Select a conversation</h2>
+                <span id="connection-status" class="text-xs text-green-600 font-medium hidden">
+                    <i class="fas fa-circle text-[8px] mr-1"></i>Online
+                </span>
             </div>
-            <div class="flex-1 p-4 overflow-y-auto">
-                <p class="text-gray-600 text-center">No messages</p>
+
+            <div id="messages-area" class="flex-1 p-4 overflow-y-auto bg-gray-50 space-y-4">
+                <div class="flex flex-col items-center justify-center h-full text-gray-400">
+                    <i class="fas fa-comments text-4xl mb-2"></i>
+                    <p>Select a user to start chatting</p>
+                </div>
             </div>
-            <div class="p-4 border-t">
-                <div class="flex gap-2">
+
+            <div class="p-4 border-t bg-white rounded-b-lg">
+                <form id="chat-form" class="flex gap-2">
                     <input
                         type="text"
+                        id="message-input"
+                        disabled
                         placeholder="Type a message..."
-                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                        autocomplete="off"
                     />
-                    <button class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <button 
+                        type="submit" 
+                        id="send-btn" 
+                        disabled 
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors">
                         <i class="fas fa-paper-plane"></i>
                     </button>
-                </div>
+                </form>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+    // --- 1. SỬ DỤNG SOCKET TỪ LAYOUT (Tránh kết nối kép) ---
+    // Nếu chưa có (hiếm khi xảy ra nếu layout load đúng), mới tạo mới
+    const socket = window.socket || io();
+    
+    // Trim ID để tránh lỗi so sánh
+    const currentUserId = "{{ session.get('user_id') }}".trim(); 
+    const currentUserRole = "{{ session.get('user_role') }}";
+    let currentPartnerId = null;
+
+    const conversationsListEl = document.getElementById('conversations-list');
+    const messagesAreaEl = document.getElementById('messages-area');
+    const chatHeaderEl = document.getElementById('chat-header');
+    const messageInputEl = document.getElementById('message-input');
+    const sendBtnEl = document.getElementById('send-btn');
+    const chatFormEl = document.getElementById('chat-form');
+
+    // --- 2. SOCKET EVENTS ---
+    if(socket.connected) {
+        document.getElementById('connection-status').classList.remove('hidden');
+    }
+    
+    socket.on('connect', () => {
+        console.log('✅ Chat Page Connected');
+        document.getElementById('connection-status').classList.remove('hidden');
+    });
+
+    socket.on('new_message', (data) => {
+        // 1. Nếu là tin nhắn CỦA MÌNH -> Bỏ qua (vì đã hiện rồi)
+        if (data.sender_id === currentUserId) return;
+
+        // 2. Nếu tin nhắn từ partner đang chat -> Hiện lên
+        if (currentPartnerId && data.sender_id === currentPartnerId) {
+            appendMessageToUI(data);
+            scrollToBottom();
+        } else {
+            // Reload list để hiện badge mới
+            loadConversations(); 
+        }
+    });
+
+    // --- 3. GỬI TIN NHẮN (OPTIMISTIC UI) ---
+    chatFormEl.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const message = messageInputEl.value.trim();
+        
+        if (message && currentPartnerId) {
+            // 1. Gửi socket
+            socket.emit('send_message', {
+                receiver_id: currentPartnerId,
+                message: message
+            });
+
+            // 2. HIỆN NGAY LẬP TỨC
+            appendMessageToUI({
+                sender_id: currentUserId,
+                message: message,
+                timestamp: new Date().toISOString()
+            });
+
+            // 3. Xóa input & Scroll
+            messageInputEl.value = '';
+            scrollToBottom();
+        }
+    });
+
+    // --- 4. CÁC HÀM UI ---
+    async function loadConversations() {
+        try {
+            const endpoint = currentUserRole === 'user' ? '/api/chat/staff' : '/api/chat/conversations';
+            const res = await fetch(endpoint);
+            const data = await res.json();
+            if (data.success) renderConversationList(data.staff || data.conversations);
+        } catch (e) console.error(e);
+    }
+
+    async function loadMessages(partnerId) {
+        messagesAreaEl.innerHTML = '<div class="text-center py-4 text-gray-500"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+        try {
+            const res = await fetch(`/api/chat/messages/${partnerId}`);
+            const data = await res.json();
+            if (data.success) {
+                messagesAreaEl.innerHTML = '';
+                if (data.messages.length === 0) messagesAreaEl.innerHTML = '<div class="text-center py-10 text-gray-400">No messages yet. Say hi! 👋</div>';
+                else {
+                    data.messages.forEach(msg => appendMessageToUI(msg));
+                    scrollToBottom();
+                }
+            }
+        } catch (e) { messagesAreaEl.innerHTML = '<div class="text-red-500">Error loading messages</div>'; }
+    }
+
+    function appendMessageToUI(msg) {
+        const isMe = msg.sender_id === currentUserId;
+        
+        // Xử lý thời gian (hỗ trợ cả ISO string và định dạng cũ nếu có)
+        let timeDisplay = '';
+        if (msg.timestamp) {
+             const date = new Date(msg.timestamp);
+             if(!isNaN(date)) timeDisplay = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else {
+             timeDisplay = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        const html = `
+            <div class="flex ${isMe ? 'justify-end' : 'justify-start'} mb-4 animate-fade-in">
+                <div class="max-w-[75%] ${isMe ? 'bg-blue-600 text-white rounded-l-xl rounded-tr-xl' : 'bg-white border border-gray-200 text-gray-800 rounded-r-xl rounded-tl-xl'} px-4 py-2 shadow-sm">
+                    <p class="text-sm leading-relaxed">${escapeHtml(msg.message)}</p>
+                    <p class="text-[10px] ${isMe ? 'text-blue-100' : 'text-gray-400'} text-right mt-1">${timeDisplay}</p>
+                </div>
+            </div>
+        `;
+        messagesAreaEl.insertAdjacentHTML('beforeend', html);
+    }
+
+    function renderConversationList(items) {
+        if (!items || items.length === 0) {
+            conversationsListEl.innerHTML = '<p class="text-center text-gray-500 p-4">No contacts found.</p>';
+            return;
+        }
+        conversationsListEl.innerHTML = items.map(item => {
+            const id = item.id || item.partner_id;
+            const name = item.name || item.partner_name;
+            const role = item.role ? `<span class="text-xs text-blue-600 bg-blue-100 px-2 rounded-full ml-2">${item.role}</span>` : '';
+            const activeClass = (currentPartnerId === id) ? 'bg-blue-50 border-blue-500' : 'hover:bg-gray-50 border-transparent';
+            const unread = item.unread_count > 0 ? `<span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full ml-auto">${item.unread_count}</span>` : '';
+
+            return `
+                <div onclick="selectConversation('${id}', '${name}')" class="flex items-center p-3 cursor-pointer rounded-lg border-l-4 transition-all ${activeClass}">
+                    <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold mr-3">${name.charAt(0).toUpperCase()}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center"><h3 class="text-sm font-medium text-gray-900 truncate">${name}</h3>${role}</div>
+                        <p class="text-xs text-gray-500 truncate">${item.last_message || 'Click to chat'}</p>
+                    </div>
+                    ${unread}
+                </div>
+            `;
+        }).join('');
+    }
+
+    window.selectConversation = function(id, name) {
+        currentPartnerId = id;
+        chatHeaderEl.textContent = name;
+        messageInputEl.disabled = false;
+        sendBtnEl.disabled = false;
+        messageInputEl.focus();
+        loadConversations();
+        loadMessages(id);
+    };
+
+    function scrollToBottom() { messagesAreaEl.scrollTop = messagesAreaEl.scrollHeight; }
+    function escapeHtml(text) { return text ? text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : ""; }
+    
+    document.addEventListener('DOMContentLoaded', loadConversations);
+</script>
+
+<style>
+    /* Animation cho tin nhắn mới */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in {
+        animation: fadeIn 0.3s ease-out forwards;
+    }
+</style>
 {% endblock %}
