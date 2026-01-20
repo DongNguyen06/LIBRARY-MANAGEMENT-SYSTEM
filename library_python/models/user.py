@@ -13,6 +13,15 @@ from models.database import get_db
 from models.guest import Guest  # Import chuẩn, đã loại bỏ block try/except dự phòng
 
 class User:
+    @staticmethod
+    def get_users_with_debt():
+        """Get list of users who have outstanding fines."""
+        db = get_db()
+        rows = db.execute(
+            'SELECT * FROM users WHERE fines > 0 ORDER BY fines DESC'
+        ).fetchall()
+        return [get_user_by_role(dict(r)) for r in rows]
+
     def __init__(self, id, email, name, role, fines, favorites, **kwargs):
         self.id = id
         self.email = email
@@ -130,7 +139,10 @@ class User:
         return check_password_hash(self.password, password)
 
     def pay_fine(self, amount: float) -> Tuple[bool, str]:
-        """Pay fine amount."""
+        """Pay fine amount and update violation records.
+        
+        ✅ FIXED: Now updates violations_history status to 'paid'
+        """
         if amount <= 0 or self.fines <= 0:
             return False, "No fines to pay or invalid amount"
 
@@ -139,28 +151,28 @@ class User:
 
         db = get_db()
         try:
+            # 1. Update user fine balance
             db.execute(
                 'UPDATE users SET fines = ? WHERE id = ?',
                 (self.fines, self.id)
             )
 
-            # Unlock account if debt cleared
+            # 2. ✅ FIXED: Update violations_history to mark as paid
+            # Update violation records associated with this user to 'paid' status
+            db.execute(
+                "UPDATE violations_history SET payment_status = 'paid' "
+                "WHERE user_id = ? AND payment_status = 'unpaid'",
+                (self.id,)
+            )
+
+            # 3. Unlock account if debt cleared
             if self.fines == 0 and self.is_locked:
                 self.unlock()
-
-            # Update violation history if table exists
-            try:
-                db.execute(
-                    "UPDATE violations_history SET payment_status = 'paid' "
-                    "WHERE user_id = ?",
-                    (self.id,)
-                )
-            except Exception:
-                pass  # Table may not exist
 
             db.commit()
             return True, f"Paid {pay_amount:,.0f} VND. Remaining: {self.fines:,.0f} VND"
         except Exception as e:
+            db.rollback()
             return False, f"Payment failed: {str(e)}"
 
     def lock(self) -> None:

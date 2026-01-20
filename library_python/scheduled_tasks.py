@@ -1,9 +1,11 @@
+from config.config import Config  # Đảm bảo đã import Config
 """
 Scheduled background tasks for the library system.
 
 Tasks include:
 - Auto-cancelling expired pickup requests (every hour)
 - Sending due date reminders (daily)
+- ✅ FIXED: Notifying users about cancelled pickups
 """
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -21,15 +23,37 @@ logger = logging.getLogger(__name__)
 def auto_cancel_expired_pickups():
     """Scheduled task: Cancel pickup requests exceeding 48-hour deadline.
     
+    ✅ FIXED: Now sends notification to user when pickup is auto-cancelled
+    
     Runs every hour to check for expired pending_pickup borrows.
     """
     try:
+        # 1. Get list of expired pickups BEFORE cancelling
+        expired_list = Borrow.get_expired_pickups_details(hours=Config.PENDING_PICKUP_HOURS)
+        
+        # 2. Send notifications to affected users
+        for row in expired_list:
+            user_id = row['user_id']
+            book_title = row['title']
+            
+            # Send notification
+            Notification.create(
+                user_id=user_id,
+                notification_type='alert',
+                title='Reservation Cancelled - Pickup Expired',
+                message=f'Your reservation for "{book_title}" has been automatically cancelled '
+                        f'because it was not picked up within {Config.PENDING_PICKUP_HOURS} hours. '
+                        f'You can reserve it again if needed.'
+            )
+
+        # 3. Then perform the actual cancellation
         cancelled_count = Borrow.auto_cancel_expired_pickups()
+        
         if cancelled_count > 0:
-            logger.info(f"Auto-cancelled {cancelled_count} expired pickup requests")
+            logger.info(f"Auto-cancelled {cancelled_count} expired pickup requests and notified users.")
             SystemLog.add(
                 'Scheduled Task: Auto-cancel Expired Pickups',
-                f'Successfully cancelled {cancelled_count} expired pickup(s)',
+                f'Successfully cancelled {cancelled_count} expired pickup(s) and sent {cancelled_count} notification(s)',
                 'system',
                 None
             )
@@ -73,9 +97,9 @@ def send_due_date_reminders():
             
             Notification.create(
                 user_id=row['user_id'],
+                notification_type='reminder',
                 title='Book Due Date Reminder',
-                message=message,
-                notification_type='reminder'
+                message=message
             )
             reminder_count += 1
         
@@ -125,9 +149,9 @@ def send_overdue_notifications():
             
             Notification.create(
                 user_id=row['user_id'],
+                notification_type='alert',
                 title='Overdue Book Alert',
-                message=message,
-                notification_type='alert'
+                message=message
             )
             notification_count += 1
         

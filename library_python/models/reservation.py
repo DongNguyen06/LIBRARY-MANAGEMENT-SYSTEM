@@ -1,9 +1,9 @@
-"""
-Reservation model for book reservation queue management.
+"""Reservation model for book reservation queue management.
 
-This module handles the reservation queue system where users can reserve
-books that are currently out of stock. When a book is returned, the system
-automatically notifies users in the queue order (FIFO).
+REFACTORED: Implements "Hidden Inventory" cascade system
+- When a reservation is cancelled, book passes to next in queue
+- Only when queue is empty, book returns to public inventory
+- Prevents race conditions and ensures fair queue management
 """
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
@@ -20,7 +20,7 @@ class Reservation:
         user_id (str): ID of user who made the reservation.
         book_id (str): ID of reserved book.
         reservation_date (str): When the reservation was made.
-        status (str): Reservation status ('waiting', 'ready', 'expired', 'cancelled').
+        status (str): Reservation status ('waiting', 'ready', 'expired', 'cancelled', 'completed').
         notified_date (str): When user was notified (for ready status).
         hold_until (str): Deadline for picking up (ready status).
         queue_position (int): Position in the reservation queue.
@@ -42,27 +42,16 @@ class Reservation:
     
     @staticmethod
     def create(user_id: str, book_id: str) -> Tuple[Optional['Reservation'], str]:
-        """Create a new reservation for a book.
-        
-        Args:
-            user_id: ID of user making the reservation.
-            book_id: ID of book to reserve.
-            
-        Returns:
-            Tuple of (Reservation instance, message).
-        """
+        """Create a new reservation for a book."""
         db = get_db()
         
-        # Check if book exists
         book = Book.get_by_id(book_id)
         if not book:
             return None, "Book not found"
         
-        # Check if book is available (shouldn't reserve if available)
         if book.available_copies > 0:
             return None, "Book is available for immediate borrowing"
         
-        # Check if user already has a reservation for this book
         existing = db.execute('''
             SELECT id FROM reservations 
             WHERE user_id = ? AND book_id = ? AND status = 'waiting'
@@ -71,7 +60,6 @@ class Reservation:
         if existing:
             return None, "You already have a reservation for this book"
         
-        # Get next queue position
         max_position = db.execute('''
             SELECT MAX(queue_position) as max_pos FROM reservations
             WHERE book_id = ? AND status = 'waiting'
@@ -79,7 +67,6 @@ class Reservation:
         
         next_position = (max_position['max_pos'] or 0) + 1
         
-        # Create reservation
         reservation_id = str(uuid.uuid4())
         reservation_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
@@ -92,7 +79,6 @@ class Reservation:
             ''', (reservation_id, user_id, book_id, reservation_date, next_position))
             db.commit()
             
-            # Log reservation
             from models.system_log import SystemLog
             from models.user import User
             user = User.get_by_id(user_id)
@@ -109,6 +95,8 @@ class Reservation:
             print(f"Error creating reservation: {e}")
             return None, "Failed to create reservation"
     
+    # ... (keep all getter static methods)
+    
     @staticmethod
     def get_by_id(reservation_id: str) -> Optional['Reservation']:
         """Get reservation by ID."""
@@ -124,15 +112,7 @@ class Reservation:
     
     @staticmethod
     def get_user_reservations(user_id: str, status: Optional[str] = None) -> List['Reservation']:
-        """Get all reservations for a user.
-        
-        Args:
-            user_id: User ID.
-            status: Filter by status (optional).
-            
-        Returns:
-            List of Reservation objects.
-        """
+        """Get all reservations for a user."""
         db = get_db()
         
         if status:
@@ -152,15 +132,7 @@ class Reservation:
     
     @staticmethod
     def get_user_book_reservation(user_id: str, book_id: str) -> Optional['Reservation']:
-        """Get user's reservation for a specific book.
-        
-        Args:
-            user_id: User ID.
-            book_id: Book ID.
-            
-        Returns:
-            Reservation instance or None.
-        """
+        """Get user's reservation for a specific book."""
         db = get_db()
         row = db.execute('''
             SELECT * FROM reservations
@@ -175,14 +147,7 @@ class Reservation:
     
     @staticmethod
     def get_next_in_queue(book_id: str) -> Optional['Reservation']:
-        """Get the next person in queue for a book.
-        
-        Args:
-            book_id: Book ID.
-            
-        Returns:
-            First waiting reservation or None.
-        """
+        """Get the next person in queue for a book."""
         db = get_db()
         row = db.execute('''
             SELECT * FROM reservations
@@ -197,14 +162,7 @@ class Reservation:
     
     @staticmethod
     def has_active_reservations(book_id: str) -> bool:
-        """Check if a book has any active reservations.
-        
-        Args:
-            book_id: Book ID to check.
-            
-        Returns:
-            True if there are waiting reservations.
-        """
+        """Check if a book has any active reservations."""
         db = get_db()
         count = db.execute('''
             SELECT COUNT(*) as count FROM reservations
@@ -215,11 +173,7 @@ class Reservation:
     
     @staticmethod
     def get_all() -> List['Reservation']:
-        """Get all reservations.
-        
-        Returns:
-            List of all Reservation instances ordered by reservation date.
-        """
+        """Get all reservations."""
         db = get_db()
         rows = db.execute('''
             SELECT * FROM reservations
@@ -241,16 +195,12 @@ class Reservation:
         return [Reservation(**dict(row)) for row in rows]
     
     def mark_ready(self, hold_hours: int = 48) -> Tuple[bool, str]:
-        """Mark reservation as ready for pickup.
-        
-        Args:
-            hold_hours: How many hours to hold the book (default 48).
-            
-        Returns:
-            Tuple of (success, message).
-        """
+        """Mark reservation as ready for pickup."""
         if self.status != 'waiting':
             return False, "Only waiting reservations can be marked ready"
+        
+        from models.notification import Notification
+        from models.system_log import SystemLog
         
         db = get_db()
         now = datetime.now()
@@ -261,80 +211,193 @@ class Reservation:
         self.notified_date = notified_date
         self.hold_until = hold_until
         
-        db.execute('''
-            UPDATE reservations 
-            SET status = ?, notified_date = ?, hold_until = ?
-            WHERE id = ?
-        ''', ('ready', notified_date, hold_until, self.id))
-        db.commit()
-        
-        # Send notification to user
-        from models.notification import Notification
-        from models.book import Book
-        book = Book.get_by_id(self.book_id)
-        if book:
-            Notification.create(
-                self.user_id,
-                'success',
-                'Reserved Book Available',
-                f'Your reserved book "{book.title}" is now available! '
-                f'Please pick it up before {hold_until}.'
-            )
-        
-        return True, "Reservation marked as ready"
+        try:
+            db.execute('''
+                UPDATE reservations 
+                SET status = ?, notified_date = ?, hold_until = ?
+                WHERE id = ?
+            ''', ('ready', notified_date, hold_until, self.id))
+
+            book = Book.get_by_id(self.book_id)
+            if book:
+                notif = Notification.create(
+                    user_id=self.user_id,
+                    notification_type='success',
+                    title='Reserved Book Available',
+                    message=f'Your reserved book "{book.title}" is now available! '
+                            f'Please pick it up before {hold_until}. '
+                            f'If not picked up within {hold_hours} hours, the reservation will expire.'
+                )
+                
+                if notif:
+                    SystemLog.add(
+                        'Reservation Ready',
+                        f'User notified that "{book.title}" is ready for pickup. '
+                        f'Hold until: {hold_until}',
+                        'info',
+                        self.user_id
+                    )
+            
+            db.commit()
+            return True, "Reservation marked as ready and notification sent"
+        except Exception as e:
+            db.rollback()
+            return False, f"Failed to mark reservation as ready: {str(e)}"
     
     def cancel(self) -> Tuple[bool, str]:
-        """Cancel the reservation.
+        """Cancel the reservation with CASCADE to next in queue.
         
-        Returns:
-            Tuple of (success, message).
+        REFACTORED: Implements "Hidden Inventory Cascade"
+        - If cancelling a 'ready' reservation: Pass book to next in queue
+        - If no one waiting: Return book to public inventory
+        - If cancelling a 'waiting' reservation: Just remove from queue
         """
         if self.status not in ['waiting', 'ready']:
             return False, "Only waiting or ready reservations can be cancelled"
         
-        db = get_db()
+        from models.system_log import SystemLog
         
-        # Update status
+        db = get_db()
+        book = Book.get_by_id(self.book_id)
+        if not book:
+            return False, "Book not found"
+        
+        was_ready = (self.status == 'ready')
+        
+        # Mark this reservation as cancelled
         self.status = 'cancelled'
         db.execute(
             'UPDATE reservations SET status = ? WHERE id = ?',
             ('cancelled', self.id)
-        ).fetchone()
+        )
         
-        # Reorder queue if this was waiting
-        if self.status == 'waiting':
+        # ========== CRITICAL: CASCADE LOGIC ==========
+        if was_ready:
+            # This person was holding a spot in hidden inventory
+            # Check if there's someone else waiting
+            next_reservation = Reservation.get_next_in_queue(self.book_id)
+            
+            if next_reservation:
+                # CASCADE: Pass the book to next person in queue
+                # Book stays in HIDDEN POOL - do NOT increase available_copies
+                success, msg = next_reservation.mark_ready(hold_hours=48)
+                
+                if success:
+                    SystemLog.add(
+                        'Hidden Inventory Cascade',
+                        f'Book "{book.title}" cascaded to next reserver after cancellation. '
+                        f'Available copies NOT increased (still in hidden pool).',
+                        'info',
+                        None
+                    )
+                else:
+                    # Cascade failed - return to public as fallback
+                    book.update_available_copies(1)
+                    SystemLog.add(
+                        'Cascade Failed - Public Return',
+                        f'Failed to cascade "{book.title}" to next reserver: {msg}. '
+                        f'Book returned to public inventory.',
+                        'warning',
+                        None
+                    )
+            else:
+                # NO ONE WAITING: Return book to PUBLIC INVENTORY
+                book.update_available_copies(1)
+                SystemLog.add(
+                    'Hidden to Public Pool',
+                    f'Book "{book.title}" returned from hidden pool to public inventory '
+                    f'(last reservation cancelled, queue empty).',
+                    'info',
+                    None
+                )
+        else:
+            # Cancelling a 'waiting' reservation
+            # Reorder queue positions for remaining waiters
             db.execute('''
                 UPDATE reservations
                 SET queue_position = queue_position - 1
                 WHERE book_id = ? AND status = 'waiting' AND queue_position > ?
             ''', (self.book_id, self.queue_position))
+            
+            SystemLog.add(
+                'Waiting Reservation Cancelled',
+                f'User cancelled waiting reservation for "{book.title}". '
+                f'Queue reordered.',
+                'info',
+                self.user_id
+            )
         
         db.commit()
-        
         return True, "Reservation cancelled successfully"
     
     def mark_expired(self) -> Tuple[bool, str]:
-        """Mark reservation as expired (didn't pick up in time).
+        """Mark reservation as expired with CASCADE.
         
-        Returns:
-            Tuple of (success, message).
+        REFACTORED: Uses same cascade logic as cancel()
         """
         if self.status != 'ready':
             return False, "Only ready reservations can expire"
         
-        db = get_db()
-        self.status = 'expired'
+        from models.system_log import SystemLog
         
+        db = get_db()
+        book = Book.get_by_id(self.book_id)
+        if not book:
+            return False, "Book not found"
+        
+        # Mark as expired
+        self.status = 'expired'
         db.execute(
             'UPDATE reservations SET status = ? WHERE id = ?',
             ('expired', self.id)
         )
-        db.commit()
         
+        # ========== CRITICAL: CASCADE LOGIC (same as cancel) ==========
+        next_reservation = Reservation.get_next_in_queue(self.book_id)
+        
+        if next_reservation:
+            # CASCADE to next person
+            success, msg = next_reservation.mark_ready(hold_hours=48)
+            
+            if success:
+                SystemLog.add(
+                    'Expired Reservation Cascade',
+                    f'Book "{book.title}" cascaded to next reserver after expiration. '
+                    f'Available copies NOT increased.',
+                    'info',
+                    None
+                )
+            else:
+                # Cascade failed - return to public
+                book.update_available_copies(1)
+                SystemLog.add(
+                    'Cascade Failed - Public Return',
+                    f'Failed to cascade "{book.title}" after expiration: {msg}. '
+                    f'Book returned to public inventory.',
+                    'warning',
+                    None
+                )
+        else:
+            # No one waiting - return to public
+            book.update_available_copies(1)
+            SystemLog.add(
+                'Expired Reservation - Public Return',
+                f'Book "{book.title}" returned to public inventory after expiration '
+                f'(queue empty).',
+                'info',
+                None
+            )
+        
+        db.commit()
         return True, "Reservation marked as expired"
     
     def complete(self) -> Tuple[bool, str]:
-        """Mark reservation as completed (book borrowed)."""
+        """Mark reservation as completed (book borrowed).
+        
+        NOTE: This does NOT affect inventory because:
+        - Book was already in hidden pool (available_copies already = 0)
+        - When user creates borrow from this reservation, inventory stays the same
+        """
         if self.status != 'ready':
             return False, "Only ready reservations can be completed"
 
@@ -346,6 +409,17 @@ class Reservation:
             ('completed', self.id)
         )
         db.commit()
+
+        from models.system_log import SystemLog
+        book = Book.get_by_id(self.book_id)
+        if book:
+            SystemLog.add(
+                'Reservation Completed',
+                f'User claimed reserved book "{book.title}". '
+                f'Book moved from hidden pool to borrowed status.',
+                'info',
+                self.user_id
+            )
 
         return True, "Reservation completed"
     

@@ -12,6 +12,21 @@ from models.system_log import SystemLog
 from models.user import User
 
 class Staff(User):
+    def get_book_interaction_status(self, book_id: str, book_obj=None) -> dict:
+        """Override to enforce read-only review access for Staff.
+        
+        Args:
+            book_id: Book identifier.
+            book_obj: Optional Book object.
+        
+        Returns:
+            Dictionary with interaction flags (can_review always False).
+        """
+        status = super().get_book_interaction_status(book_id, book_obj)
+        # CRITICAL: Staff cannot review (read-only)
+        status['can_review'] = False
+        status['user_review'] = None  # Don't show review form
+        return status
     
     def approve_borrow_request(self, borrow_id: str) -> Tuple[bool, str]:
         """Approve borrow request (pickup).

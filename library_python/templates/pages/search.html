@@ -8,7 +8,7 @@
 
     <!-- Search and Filter -->
     <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
-        <form method="GET" action="{{ url_for('search') }}" class="space-y-4">
+        <form method="GET" action="{{ url_for('main.search') }}" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="md:col-span-2">
                     <label class="block text-sm font-medium text-gray-700 mb-1">Search</label>
@@ -71,7 +71,7 @@
     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
         {% for book in books %}
         <div class="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-            <a href="{{ url_for('book_detail', book_id=book.id) }}">
+            <a href="{{ url_for('main.book_detail', book_id=book.id) }}">
                 <img src="{{ book.cover_url }}" alt="{{ book.title }}" class="w-full h-64 object-cover rounded-t-lg">
                 <div class="p-4">
                     <h3 class="font-semibold text-gray-900 mb-1 line-clamp-2">{{ book.title }}</h3>

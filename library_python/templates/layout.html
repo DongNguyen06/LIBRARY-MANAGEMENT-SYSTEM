@@ -19,13 +19,13 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <!-- Logo -->
-                <a href="{{ url_for('home') }}" class="flex items-center gap-2">
+                <a href="{{ url_for('main.home') }}" class="flex items-center gap-2">
                     <i class="fas fa-book-open text-3xl text-blue-600"></i>
                     <span class="text-xl font-semibold text-gray-900">City Library</span>
                 </a>
 
                 <!-- Search Bar - Desktop -->
-                <form action="{{ url_for('search') }}" method="GET" class="hidden md:flex flex-1 max-w-2xl mx-8">
+                <form action="{{ url_for('main.search') }}" method="GET" class="hidden md:flex flex-1 max-w-2xl mx-8">
                     <div class="relative w-full">
                         <input
                             type="text"
@@ -40,16 +40,16 @@
                 <!-- Navigation -->
                 <div class="hidden md:flex items-center gap-4">
                     {% if not current_user %}
-                        <a href="{{ url_for('login') }}" class="px-4 py-2 text-gray-700 hover:text-blue-600">
+                        <a href="{{ url_for('auth.login') }}" class="px-4 py-2 text-gray-700 hover:text-blue-600">
                             Login
                         </a>
-                        <a href="{{ url_for('register') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <a href="{{ url_for('auth.register') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                             Register
                         </a>
                     {% else %}
                         <!-- Notifications (only for users) -->
                         {% if current_user.role == 'user' %}
-                            <a href="{{ url_for('notifications') }}" class="p-2 text-gray-700 hover:text-blue-600">
+                            <a href="{{ url_for('user.notifications') }}" class="p-2 text-gray-700 hover:text-blue-600">
                                 <i class="fas fa-bell text-xl"></i>
                             </a>
                             
@@ -82,34 +82,34 @@
                             
                             <div id="userDropdownMenu" class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 hidden z-50">
                                 {% if current_user.role == 'user' %}
-                                    <a href="{{ url_for('user_dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                    <a href="{{ url_for('user.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-dashboard mr-2"></i> Dashboard
                                     </a>
-                                    <a href="{{ url_for('profile') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                    <a href="{{ url_for('user.profile') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-user mr-2"></i> Profile
                                     </a>
-                                    <a href="{{ url_for('borrowed_books') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                    <a href="{{ url_for('user.borrowed_books') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-book mr-2"></i> Borrowed Books
                                     </a>
-                                    <a href="{{ url_for('user_reservations') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                    <a href="{{ url_for('user.reservations') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-bookmark mr-2"></i> My Reservations
                                     </a>
-                                    <a href="{{ url_for('favorites') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                    <a href="{{ url_for('user.favorites') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-heart mr-2"></i> Favorites
                                     </a>
                                 {% elif current_user.role == 'staff' %}
-                                    <a href="{{ url_for('staff_dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                    <a href="{{ url_for('staff.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-dashboard mr-2"></i> Staff Dashboard
                                     </a>
                                 {% elif current_user.role == 'admin' %}
-                                    <a href="{{ url_for('admin_dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                                    <a href="{{ url_for('admin.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-dashboard mr-2"></i> Admin Dashboard
                                     </a>
                                 {% endif %}
                                 
                                 <hr class="my-2">
                                 
-                                <a href="{{ url_for('logout') }}" class="block px-4 py-2 text-red-600 hover:bg-gray-100">
+                                <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-red-600 hover:bg-gray-100">
                                     <i class="fas fa-sign-out-alt mr-2"></i> Logout
                                 </a>
                             </div>
@@ -128,7 +128,7 @@
         <div id="mobileMenu" class="hidden md:hidden border-t border-gray-200">
             <div class="px-4 py-3 space-y-3">
                 <!-- Mobile Search -->
-                <form action="{{ url_for('search') }}" method="GET">
+                <form action="{{ url_for('main.search') }}" method="GET">
                     <input
                         type="text"
                         name="q"
@@ -138,17 +138,17 @@
                 </form>
                 
                 {% if current_user %}
-                    <a href="{{ url_for('user_dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                    <a href="{{ url_for('user.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
                         Dashboard
                     </a>
-                    <a href="{{ url_for('logout') }}" class="block px-4 py-2 text-red-600 hover:bg-gray-100 rounded">
+                    <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-red-600 hover:bg-gray-100 rounded">
                         Logout
                     </a>
                 {% else %}
-                    <a href="{{ url_for('login') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                    <a href="{{ url_for('auth.login') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
                         Login
                     </a>
-                    <a href="{{ url_for('register') }}" class="block px-4 py-2 bg-blue-600 text-white rounded-lg text-center">
+                    <a href="{{ url_for('auth.register') }}" class="block px-4 py-2 bg-blue-600 text-white rounded-lg text-center">
                         Register
                     </a>
                 {% endif %}
@@ -190,10 +190,10 @@
                 <div>
                     <h3 class="text-lg font-semibold mb-4">Quick Links</h3>
                     <ul class="space-y-2 text-gray-400">
-                        <li><a href="{{ url_for('home') }}" class="hover:text-white">Home</a></li>
-                        <li><a href="{{ url_for('search') }}" class="hover:text-white">Browse Books</a></li>
+                        <li><a href="{{ url_for('main.home') }}" class="hover:text-white">Home</a></li>
+                        <li><a href="{{ url_for('main.search') }}" class="hover:text-white">Browse Books</a></li>
                         {% if current_user %}
-                        <li><a href="{{ url_for('user_dashboard') }}" class="hover:text-white">My Dashboard</a></li>
+                        <li><a href="{{ url_for('user.dashboard') }}" class="hover:text-white">My Dashboard</a></li>
                         {% endif %}
                     </ul>
                 </div>

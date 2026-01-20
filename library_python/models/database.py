@@ -79,7 +79,7 @@ def init_db():
         )
     ''')
     
-    # Create borrows table
+    # Create borrows table - FIXED: Added missing columns
     db.execute('''
         CREATE TABLE IF NOT EXISTS borrows (
             id TEXT PRIMARY KEY,
@@ -90,6 +90,10 @@ def init_db():
             return_date TEXT,
             status TEXT NOT NULL DEFAULT 'waiting',
             renewed_count INTEGER DEFAULT 0,
+            pending_until TEXT,
+            condition TEXT,
+            damage_fee REAL DEFAULT 0.0,
+            late_fee REAL DEFAULT 0.0,
             FOREIGN KEY (user_id) REFERENCES users (id),
             FOREIGN KEY (book_id) REFERENCES books (id)
         )
@@ -106,6 +110,38 @@ def init_db():
             date TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users (id),
             FOREIGN KEY (book_id) REFERENCES books (id)
+        )
+    ''')
+    
+    # Create reservations table - FIXED: ADDED NEW TABLE
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS reservations (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            book_id TEXT NOT NULL,
+            reservation_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'waiting',
+            notified_date TEXT,
+            hold_until TEXT,
+            queue_position INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (book_id) REFERENCES books (id)
+        )
+    ''')
+    
+    # Create violations_history table - FIXED: ADDED NEW TABLE
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS violations_history (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            borrow_id TEXT,
+            violation_type TEXT NOT NULL,
+            description TEXT,
+            fine_amount REAL NOT NULL,
+            payment_status TEXT NOT NULL DEFAULT 'unpaid',
+            violation_date TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (id),
+            FOREIGN KEY (borrow_id) REFERENCES borrows (id)
         )
     ''')
     

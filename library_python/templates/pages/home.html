@@ -11,7 +11,7 @@
             <p class="text-xl text-blue-100 mb-8">
                 Discover thousands of books, reserve your favorites, and embark on your next reading adventure.
             </p>
-            <a href="{{ url_for('search') }}" class="inline-block px-6 py-3 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-semibold">
+            <a href="{{ url_for('main.search') }}" class="inline-block px-6 py-3 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-semibold">
                 Browse Our Collection
             </a>
         </div>
@@ -61,7 +61,7 @@
                 <i class="fas fa-clock text-2xl text-blue-600"></i>
                 <h2 class="text-2xl font-bold text-gray-900">New Arrivals</h2>
             </div>
-            <a href="{{ url_for('search', sort='new') }}" class="flex items-center gap-1 text-blue-600 hover:text-blue-700">
+            <a href="{{ url_for('main.search', sort='new') }}" class="flex items-center gap-1 text-blue-600 hover:text-blue-700">
                 View All
                 <i class="fas fa-chevron-right text-sm"></i>
             </a>
@@ -69,7 +69,7 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
             {% for book in new_arrivals %}
             <div class="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                <a href="{{ url_for('book_detail', book_id=book.id) }}">
+                <a href="{{ url_for('main.book_detail', book_id=book.id) }}">
                     <img src="{{ book.cover_url }}" alt="{{ book.title }}" class="w-full h-64 object-cover rounded-t-lg">
                     <div class="p-4">
                         <h3 class="font-semibold text-gray-900 mb-1 line-clamp-2">{{ book.title }}</h3>
@@ -97,7 +97,7 @@
                 <i class="fas fa-fire text-2xl text-green-600"></i>
                 <h2 class="text-2xl font-bold text-gray-900">Most Borrowed Books</h2>
             </div>
-            <a href="{{ url_for('search', sort='popular') }}" class="flex items-center gap-1 text-blue-600 hover:text-blue-700">
+            <a href="{{ url_for('main.search', sort='popular') }}" class="flex items-center gap-1 text-blue-600 hover:text-blue-700">
                 View All
                 <i class="fas fa-chevron-right text-sm"></i>
             </a>
@@ -105,7 +105,7 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
             {% for book in most_borrowed %}
             <div class="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                <a href="{{ url_for('book_detail', book_id=book.id) }}">
+                <a href="{{ url_for('main.book_detail', book_id=book.id) }}">
                     <img src="{{ book.cover_url }}" alt="{{ book.title }}" class="w-full h-64 object-cover rounded-t-lg">
                     <div class="p-4">
                         <h3 class="font-semibold text-gray-900 mb-1 line-clamp-2">{{ book.title }}</h3>
@@ -137,7 +137,7 @@
                 <i class="fas fa-star text-2xl text-yellow-500"></i>
                 <h2 class="text-2xl font-bold text-gray-900">Top Rated Books</h2>
             </div>
-            <a href="{{ url_for('search', sort='rating') }}" class="flex items-center gap-1 text-blue-600 hover:text-blue-700">
+            <a href="{{ url_for('main.search', sort='rating') }}" class="flex items-center gap-1 text-blue-600 hover:text-blue-700">
                 View All
                 <i class="fas fa-chevron-right text-sm"></i>
             </a>
@@ -145,7 +145,7 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
             {% for book in top_rated %}
             <div class="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                <a href="{{ url_for('book_detail', book_id=book.id) }}">
+                <a href="{{ url_for('main.book_detail', book_id=book.id) }}">
                     <img src="{{ book.cover_url }}" alt="{{ book.title }}" class="w-full h-64 object-cover rounded-t-lg">
                     <div class="p-4">
                         <h3 class="font-semibold text-gray-900 mb-1 line-clamp-2">{{ book.title }}</h3>

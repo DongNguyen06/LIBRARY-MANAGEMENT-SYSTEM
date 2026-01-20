@@ -14,7 +14,7 @@
                 <span class="text-3xl font-bold text-gray-900">{{ borrowed_books|length }}</span>
             </div>
             <p class="text-gray-600">Currently Borrowed</p>
-            <a href="{{ url_for('borrowed_books') }}" class="text-sm text-blue-600 hover:text-blue-700 mt-2 inline-block">
+            <a href="{{ url_for('user.borrowed_books') }}" class="text-sm text-blue-600 hover:text-blue-700 mt-2 inline-block">
                 View All →
             </a>
         </div>
@@ -49,7 +49,7 @@
                     You must pay this fine to borrow new books.
                 </span>
 
-                <form action="{{ url_for('pay_fine') }}" method="POST" style="display:inline;">
+                <form action="{{ url_for('user.pay_fine') }}" method="POST" style="display:inline;">
                     <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Confirm payment of ${{ '%.2f'|format(current_user.fines) }}?');">
                         <i class="fas fa-credit-card me-1"></i> Pay Now
                     </button>
@@ -69,7 +69,7 @@
                     You have {{ overdue_books|length }} overdue book(s).
                     Please return them as soon as possible to avoid additional fines.
                 </p>
-                <a href="{{ url_for('borrowed_books') }}" class="text-sm text-red-600 hover:text-red-700 mt-1 inline-block font-semibold">
+                <a href="{{ url_for('user.borrowed_books') }}" class="text-sm text-red-600 hover:text-red-700 mt-1 inline-block font-semibold">
                     View Overdue Books →
                 </a>
             </div>
@@ -134,13 +134,13 @@
             {% endfor %}
         </div>
         {% if borrowed_books|length > 3 %}
-        <a href="{{ url_for('borrowed_books') }}" class="text-blue-600 hover:text-blue-700 mt-4 inline-block">
+        <a href="{{ url_for('user.borrowed_books') }}" class="text-blue-600 hover:text-blue-700 mt-4 inline-block">
             View all borrowed books →
         </a>
         {% endif %}
         {% else %}
         <p class="text-gray-600">You have no borrowed books at the moment.</p>
-        <a href="{{ url_for('search') }}" class="text-blue-600 hover:text-blue-700 mt-2 inline-block">
+        <a href="{{ url_for('main.search') }}" class="text-blue-600 hover:text-blue-700 mt-2 inline-block">
             Browse our collection →
         </a>
         {% endif %}

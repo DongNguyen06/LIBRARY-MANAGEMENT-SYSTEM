@@ -11,6 +11,22 @@ from models.database import get_db  # <--- Thêm import này để tính toán f
 
 class Admin(Staff):
 
+    def get_book_interaction_status(self, book_id: str, book_obj=None) -> dict:
+        """Override to enforce read-only review access for Admin.
+        
+        Args:
+            book_id: Book identifier.
+            book_obj: Optional Book object.
+        
+        Returns:
+            Dictionary with interaction flags (can_review always False).
+        """
+        status = super().get_book_interaction_status(book_id, book_obj)
+        # CRITICAL: Admin cannot review (read-only)
+        status['can_review'] = False
+        status['user_review'] = None  # Don't show review form
+        return status
+
     def save_system_config(self, config_data: Dict) -> Tuple[bool, str]:
         """Save system configuration.
 
