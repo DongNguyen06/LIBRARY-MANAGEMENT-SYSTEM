@@ -2,7 +2,6 @@ import os
 from datetime import timedelta
 from typing import Set
 
-
 class Config:
     # Secret key for session management and security
     SECRET_KEY: str = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
