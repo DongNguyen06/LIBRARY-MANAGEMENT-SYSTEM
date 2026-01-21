@@ -1,10 +1,3 @@
-"""Reservation model for book reservation queue management.
-
-REFACTORED: Implements "Hidden Inventory" cascade system
-- When a reservation is cancelled, book passes to next in queue
-- Only when queue is empty, book returns to public inventory
-- Prevents race conditions and ensures fair queue management
-"""
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
 import uuid
@@ -95,7 +88,6 @@ class Reservation:
             print(f"Error creating reservation: {e}")
             return None, "Failed to create reservation"
     
-    # ... (keep all getter static methods)
     
     @staticmethod
     def get_by_id(reservation_id: str) -> Optional['Reservation']:

@@ -13,9 +13,3 @@ socketio: SocketIO = SocketIO(
     cors_allowed_origins="*",
     async_mode='threading'
 )
-
-# You can add other extensions here as needed
-# For example:
-# db = SQLAlchemy()
-# migrate = Migrate()
-# login_manager = LoginManager()

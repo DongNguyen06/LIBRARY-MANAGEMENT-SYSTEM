@@ -1,12 +1,6 @@
-"""Notification model for user notifications.
-
-This module handles creating, retrieving, and managing
-user notifications in the library system.
-"""
 import uuid
 from datetime import datetime
 from typing import List, Optional
-
 from models.database import get_db
 
 

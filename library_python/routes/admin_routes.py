@@ -1,13 +1,6 @@
-"""Admin dashboard and system configuration routes.
-
-This module handles admin-specific operations including system configuration,
-log management, and administrative notifications.
-"""
 import csv
 from io import StringIO
-
 from flask import Blueprint, flash, make_response, redirect, render_template, request, session, url_for
-
 from models.admin import Admin
 from models.system_config import SystemConfig
 from models.system_log import SystemLog
@@ -65,34 +58,11 @@ def save_config():
     flash(message, 'success' if success else 'error')
     return redirect(url_for('admin.dashboard'))
 
-
-@admin_bp.route('/logs/clear', methods=['POST'])
-@login_required
-@role_required('admin')
-def clear_logs():
-    """Clear old system logs.
-    
-    Form data:
-        days: Number of days of logs to keep (delete older).
-    
-    Returns:
-        Redirect to admin dashboard with status message.
-    """
-    admin = Admin.get_by_id(session['user_id'])
-    days = int(request.form.get('days', 30))
-    
-    success, message = admin.clear_system_logs(days)
-    flash(message, 'success' if success else 'error')
-    return redirect(url_for('admin.dashboard'))
-
-
 @admin_bp.route('/send-notifications')
 @login_required
 @role_required('admin')
 def send_notifications():
     """Display notification sending page for admin.
-    
-    ✅ FIXED: Now supports saving notification templates
     
     Returns:
         Rendered notification sending template.
@@ -100,7 +70,6 @@ def send_notifications():
     return render_template('pages/admin/send_notifications.html')
 
 
-# ✅ NEW: Add support for notification templates
 @admin_bp.route('/notification-templates', methods=['GET'])
 @login_required
 @role_required('admin')
@@ -112,7 +81,6 @@ def list_notification_templates():
     """
     from flask import jsonify
     
-    # ✅ FIXED: Define built-in templates
     templates = [
         {
             'id': 'overdue_reminder',

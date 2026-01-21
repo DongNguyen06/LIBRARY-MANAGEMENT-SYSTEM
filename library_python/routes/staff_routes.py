@@ -1,10 +1,4 @@
-"""Staff dashboard and management routes.
-
-This module handles staff-specific operations including borrow approval,
-book returns, and inventory management.
-"""
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
-
 from models.book import Book
 from models.borrow import Borrow
 from models.reservation import Reservation

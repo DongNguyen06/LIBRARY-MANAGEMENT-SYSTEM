@@ -1,17 +1,13 @@
-"""Database initialization and connection management.
-
-This module provides database connection management, schema initialization,
-and sample data loading for the library management system.
-"""
 import csv
 import os
 import sqlite3
 from typing import Optional
-
 from flask import g
-
 from config.config import Config
-
+import json
+from datetime import datetime
+import uuid
+from werkzeug.security import generate_password_hash
 
 def get_db() -> sqlite3.Connection:
     """Get database connection from Flask application context.
@@ -202,11 +198,7 @@ def init_db():
 
 def insert_mock_data(db):
     """Insert mock data for testing"""
-    import json
-    from datetime import datetime
-    import uuid
-    from werkzeug.security import generate_password_hash
-    
+   
     # Check if data already exists
     cursor = db.execute('SELECT COUNT(*) FROM users')
     if cursor.fetchone()[0] > 0:
@@ -269,9 +261,11 @@ def insert_mock_data(db):
     
     # Load books from CSV file
     books = []
+    # Lưu ý: Đảm bảo đường dẫn file CSV là chính xác
     csv_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), '..', 'books_clean_top100_1.csv')
     
-    try:
+    # --- ĐÃ SỬA: Xóa try/except và lùi đầu dòng về đúng vị trí ---
+    if os.path.exists(csv_file):
         with open(csv_file, 'r', encoding='utf-8-sig', errors='ignore') as f:
             csv_reader = csv.DictReader(f)
             for i, row in enumerate(csv_reader):
@@ -312,46 +306,9 @@ def insert_mock_data(db):
                     'rating': round(3.5 + (i % 15) / 10, 1),  # Rating 3.5-5.0
                     'borrow_count': (i * 7) % 500  # Varied borrow count
                 })
-    except FileNotFoundError:
-        print(f"Warning: CSV file not found at {csv_file}. Using fallback books.")
-        # Fallback to a few demo books if CSV not found
-        books = [
-            {
-                'id': str(uuid.uuid4()),
-                'title': 'The Great Gatsby',
-                'author': 'F. Scott Fitzgerald',
-                'category': 'Classic Literature',
-                'publisher': 'Scribner',
-                'year': 1925,
-                'language': 'English',
-                'isbn': '978-0-7432-7356-5',
-                'description': 'A masterpiece of American literature set in the Jazz Age.',
-                'cover_url': 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400&h=600&fit=crop',
-                'total_copies': 5,
-                'available_copies': 2,
-                'shelf_location': 'A-12-3',
-                'rating': 4.5,
-                'borrow_count': 342
-            },
-            {
-                'id': str(uuid.uuid4()),
-                'title': '1984',
-                'author': 'George Orwell',
-                'category': 'Science Fiction',
-                'publisher': 'Secker & Warburg',
-                'year': 1949,
-                'language': 'English',
-                'isbn': '978-0-452-28423-4',
-                'description': 'A dystopian social science fiction novel.',
-                'cover_url': 'https://images.unsplash.com/photo-1495446815901-a7297e633e8d?w=400&h=600&fit=crop',
-                'total_copies': 6,
-                'available_copies': 4,
-                'shelf_location': 'B-05-2',
-                'rating': 4.7,
-                'borrow_count': 412
-            }
-        ]
-    
+    else:
+        print(f"Warning: CSV file not found at {csv_file}")
+
     for book in books:
         db.execute('''
             INSERT INTO books (id, title, author, category, publisher, year, language,

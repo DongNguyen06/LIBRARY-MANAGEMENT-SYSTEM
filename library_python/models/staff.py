@@ -1,9 +1,4 @@
-"""Staff model.
-
-Encapsulates business logic for staff operations.
-"""
 from typing import Dict, Tuple
-
 from models.book import Book
 from models.borrow import Borrow
 from models.database import get_db
@@ -23,9 +18,8 @@ class Staff(User):
             Dictionary with interaction flags (can_review always False).
         """
         status = super().get_book_interaction_status(book_id, book_obj)
-        # CRITICAL: Staff cannot review (read-only)
         status['can_review'] = False
-        status['user_review'] = None  # Don't show review form
+        status['user_review'] = None 
         return status
     
     def approve_borrow_request(self, borrow_id: str) -> Tuple[bool, str]:

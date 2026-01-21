@@ -1,13 +1,8 @@
-"""Admin model.
-
-Inherits from Staff and adds system config capabilities.
-"""
 from typing import Dict, Tuple
-
 from models.staff import Staff
 from models.system_config import SystemConfig
 from models.system_log import SystemLog
-from models.database import get_db  # <--- Thêm import này để tính toán fines
+from models.database import get_db 
 
 class Admin(Staff):
 
@@ -22,9 +17,8 @@ class Admin(Staff):
             Dictionary with interaction flags (can_review always False).
         """
         status = super().get_book_interaction_status(book_id, book_obj)
-        # CRITICAL: Admin cannot review (read-only)
         status['can_review'] = False
-        status['user_review'] = None  # Don't show review form
+        status['user_review'] = None 
         return status
 
     def save_system_config(self, config_data: Dict) -> Tuple[bool, str]:
@@ -48,27 +42,6 @@ class Admin(Staff):
         )
 
         return True, "Configuration saved successfully"
-
-    def clear_system_logs(self, days: int) -> Tuple[bool, str]:
-        """Clear old system logs.
-
-        Args:
-            days: Number of days to keep (delete older than this).
-
-        Returns:
-            Tuple of (success, message).
-        """
-        try:
-            SystemLog.clear_old_logs(days)
-            SystemLog.add(
-                'Clear Logs',
-                f'Admin {self.name} cleared logs older than {days} days',
-                'admin',
-                self.id
-            )
-            return True, f"Deleted logs older than {days} days"
-        except Exception as e:
-            return False, str(e)
 
     def get_stats(self) -> Dict[str, any]:
         """Get dashboard statistics for admin.

@@ -1,9 +1,4 @@
-"""Main public routes for the library management system.
-
-This module handles public-facing pages like home, search, and book details.
-"""
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
-
 from models.book import Book
 from models.borrow import Borrow
 from models.review import Review

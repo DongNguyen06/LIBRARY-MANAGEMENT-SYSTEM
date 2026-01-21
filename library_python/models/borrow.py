@@ -1,10 +1,3 @@
-"""Borrow model with improved fine calculation and business rules.
-
-REFACTORED: Implements "Hidden Inventory" system for reservations.
-- Books returned when reservations exist go to a "hidden pool"
-- Only users with ready reservations can claim these books
-- Prevents race conditions where public users steal reserved books
-"""
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
@@ -14,8 +7,6 @@ from models.database import get_db
 
 
 class Borrow:
-    # ... (keep all existing static methods like get_expired_pickups_details, etc.)
-    
     @staticmethod
     def get_expired_pickups_details(hours=48):
         """Lấy danh sách chi tiết các đơn pending quá hạn để gửi thông báo."""
@@ -44,7 +35,6 @@ class Borrow:
         self.damage_fee = float(damage_fee) if damage_fee else 0.0
         self.late_fee = float(late_fee) if late_fee else 0.0
     
-    # ... (keep all property methods and other existing methods)
     
     @property
     def is_pending(self) -> bool:
@@ -103,7 +93,6 @@ class Borrow:
         else:
             return 0.0
 
-    # ... (keep other static getter methods)
 
     @staticmethod
     def create(user_id, book_id):
@@ -322,7 +311,6 @@ class Borrow:
             message += f". Late fee: {self.late_fee:,.0f} VND, Damage fee: {self.damage_fee:,.0f} VND"
         return True, message
 
-    # ... (keep all other existing methods like renew, cancel, etc.)
     
     def renew(self, extension_days=7) -> Tuple[bool, str]:
         """Renew borrowed book with proper business rules."""
@@ -414,7 +402,6 @@ class Borrow:
 
         return True, "Borrow request cancelled successfully"
 
-    # ... (keep all remaining methods like auto_cancel_expired_pickups, helper methods, etc.)
     
     @staticmethod
     def auto_cancel_expired_pickups():
@@ -502,7 +489,6 @@ class Borrow:
             'fine_amount': self.get_fine_amount()
         }
 
-    # Keep all static getter methods
     @staticmethod
     def get_by_id(borrow_id):
         db = get_db()

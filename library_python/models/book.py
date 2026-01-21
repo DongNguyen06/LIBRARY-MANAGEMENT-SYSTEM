@@ -1,36 +1,8 @@
-"""Book model module.
-
-This module defines the Book model for managing library books
-in the system.
-"""
 from typing import Optional, List, Dict, Any
 from models.database import get_db
 
 
 class Book:
-    """Represents a book in the library system.
-    
-    This class handles all book-related operations including searching,
-    borrowing management, and inventory tracking.
-    
-    Attributes:
-        id (str): Unique identifier for the book.
-        title (str): Book title.
-        author (str): Book author name.
-        category (str): Book category/genre.
-        publisher (str): Publisher name.
-        year (int): Publication year.
-        language (str): Book language.
-        isbn (str): ISBN number.
-        description (str): Book description/summary.
-        cover_url (str): URL or path to cover image.
-        total_copies (int): Total number of copies owned.
-        available_copies (int): Number of copies currently available.
-        shelf_location (str): Physical shelf location.
-        rating (float): Average rating from reviews (0.0-5.0).
-        borrow_count (int): Total times this book has been borrowed.
-    """
-    
     def __init__(self, id: str, title: str, author: str, category: str,
                  publisher: str, year: int, language: str, isbn: str,
                  description: str, cover_url: str, total_copies: int,

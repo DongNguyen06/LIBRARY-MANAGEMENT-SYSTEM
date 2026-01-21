@@ -1,12 +1,6 @@
-"""Chat message model for real-time messaging.
-
-This module handles creating, retrieving, and managing
-chat messages between users and staff.
-"""
 import uuid
 from datetime import datetime
 from typing import List, Optional
-
 from models.database import get_db
 
 
@@ -146,7 +140,6 @@ class ChatMessage:
         """
         db = get_db()
 
-        # Get all unique conversation partners
         rows = db.execute('''
             SELECT DISTINCT 
                 CASE 
@@ -208,18 +201,6 @@ class ChatMessage:
     @staticmethod
     def send_message(sender_id: str, receiver_id: str,
                      message: str) -> tuple:
-        """Send a chat message with validation and offline handling.
-        
-        ✅ FIXED: Now handles offline receiver scenarios
-        
-        Args:
-            sender_id: ID of the message sender.
-            receiver_id: ID of the message receiver.
-            message: Message text content.
-
-        Returns:
-            Tuple of (ChatMessage or None, status message).
-        """
         from models.user import User
         
         if not message or not message.strip():
@@ -231,17 +212,12 @@ class ChatMessage:
         if not sender or not receiver:
             return None, "Invalid sender or receiver"
 
-        # ✅ FIXED: Create message regardless of receiver online status
-        # Message persists in DB for offline users to read later
         chat_message = ChatMessage.create(sender_id, receiver_id, message.strip())
         
         if chat_message:
-            # Check if receiver is online
-            from app import online_users  # Import online_users from app.py
+            from app import online_users 
             
             if receiver_id not in online_users:
-                # ✅ FIXED: Mark message as pending/unread for offline users
-                # They will see it when they next login
                 status = "Message saved. User is currently offline and will see it when they log in."
             else:
                 status = "Message sent successfully"
@@ -252,16 +228,6 @@ class ChatMessage:
 
     @staticmethod
     def get_unread_messages(user_id: str) -> list:
-        """Get unread messages for a user (for offline scenarios).
-        
-        ✅ NEW: Retrieve messages received while offline
-        
-        Args:
-            user_id: User ID
-            
-        Returns:
-            List of unread messages
-        """
         db = get_db()
         
         rows = db.execute('''
@@ -275,13 +241,6 @@ class ChatMessage:
 
     @staticmethod
     def get_staff_availability() -> dict:
-        """Check if any staff members are currently available.
-        
-        ✅ NEW: Better offline handling for chat
-        
-        Returns:
-            Dict with availability info
-        """
         from app import online_users
         from models.user import User
         
@@ -319,14 +278,6 @@ class ChatMessage:
 
     @staticmethod
     def get_recent_conversations_with_details(user_id: str) -> List[dict]:
-        """Get recent conversations with user details.
-
-        Args:
-            user_id: ID of the user.
-
-        Returns:
-            List of conversation dictionaries with partner details.
-        """
         from models.user import User
 
         conversations = ChatMessage.get_recent_conversations(user_id)
@@ -342,11 +293,6 @@ class ChatMessage:
 
     @staticmethod
     def get_available_staff() -> List[dict]:
-        """Get list of staff/admin members available for chat.
-
-        Returns:
-            List of dictionaries with staff member details.
-        """
         db = get_db()
 
         rows = db.execute('''

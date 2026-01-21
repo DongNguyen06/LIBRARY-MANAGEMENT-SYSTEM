@@ -1,12 +1,5 @@
-"""API endpoints for AJAX requests.
-
-This module handles all JSON API endpoints for frontend interactions
-including book operations, notifications, chat, and reviews.
-"""
 from typing import Dict, List, Tuple
-
 from flask import Blueprint, jsonify, request, session
-
 from models.book import Book
 from models.borrow import Borrow
 from models.chat_message import ChatMessage
@@ -49,7 +42,7 @@ def get_books():
 def borrow_book(book_id: str):
     """Create a borrow request for a book.
     
-    ✅ FIXED: Now sends notification to user confirming the borrow request
+    sends notification to user confirming the borrow request
     
     Args:
         book_id: Book identifier.
@@ -61,7 +54,7 @@ def borrow_book(book_id: str):
     
     borrow, message = Borrow.create(session['user_id'], book_id)
     
-    # ✅ FIXED: Send notification when borrow request is successful
+    # Send notification when borrow request is successful
     if borrow:
         user = User.get_by_id(session['user_id'])
         book = Book.get_by_id(book_id)

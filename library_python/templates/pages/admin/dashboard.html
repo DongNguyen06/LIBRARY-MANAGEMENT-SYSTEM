@@ -236,7 +236,6 @@
                 </form>
             </div>
 
-            <!-- System Logs Tab -->
             <div id="content-logs" class="tab-content hidden">
                 <h2 class="text-xl font-bold text-gray-900 mb-4">System Activity Logs</h2>
                 
@@ -244,7 +243,6 @@
                     {% if logs %}
                         {% for log in logs %}
                         <div class="flex items-start gap-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
-                            <!-- Icon -->
                             <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center
                                 {% if log.log_type == 'admin' %}bg-purple-100
                                 {% elif log.log_type == 'warning' %}bg-yellow-100
@@ -267,7 +265,6 @@
                                 </i>
                             </div>
                             
-                            <!-- Content -->
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex-1">
@@ -304,22 +301,11 @@
 
                 <div class="flex gap-3">
                     <a href="{{ url_for('admin.export_logs') }}" 
-                       class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                       class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium inline-flex items-center">
                         <i class="fas fa-download mr-2"></i>Export Logs
                     </a>
-                    <form action="{{ url_for('admin.clear_logs') }}" method="POST" class="inline"
-                          onsubmit="return confirm('Are you sure you want to clear old logs?')">
-                        <input type="hidden" name="days" value="30">
-                        <button type="submit" 
-                                class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
-                            <i class="fas fa-trash mr-2"></i>Clear Old Logs (30+ days)
-                        </button>
-                    </form>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
 
 <script>
 function switchTab(tabName) {

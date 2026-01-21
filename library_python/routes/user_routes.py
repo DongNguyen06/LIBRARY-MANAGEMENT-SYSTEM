@@ -1,10 +1,4 @@
-"""User dashboard and profile routes.
-
-This module handles user-specific pages including dashboard, profile,
-borrowed books, reservations, and favorites.
-"""
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for
-
 from models.borrow import Borrow
 from models.reservation import Reservation
 from models.user import User

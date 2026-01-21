@@ -1,8 +1,3 @@
-"""Authentication routes for the library management system.
-
-This module handles user authentication including login, registration,
-logout, and password recovery.
-"""
 from typing import Optional
 
 from flask import (

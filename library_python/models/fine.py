@@ -1,6 +1,3 @@
-"""Fine model module.
-Handles fine logic and violation history tracking.
-"""
 import uuid
 from datetime import datetime
 
@@ -17,8 +14,6 @@ class Fine:
     @staticmethod
     def create(user_id, amount, reason, borrow_id=None):
         """Create violation record and track fine amount.
-        
-        ✅ FIXED: Properly handles violations_history table creation
         
         Args:
             user_id: User who incurred the fine

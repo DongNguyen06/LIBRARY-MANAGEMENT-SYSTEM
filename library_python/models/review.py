@@ -1,12 +1,6 @@
-"""Review model for book reviews and ratings.
-
-This module handles creating, retrieving, and managing
-book reviews and ratings in the library system.
-"""
 import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple
-
 from models.database import get_db
 
 

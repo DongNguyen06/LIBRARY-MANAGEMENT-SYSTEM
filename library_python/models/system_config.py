@@ -1,11 +1,5 @@
-"""System configuration model for managing system settings.
-
-This module provides functionality for storing and retrieving
-dynamic system configuration settings from the database.
-"""
 import json
 from typing import Any, Dict
-
 from models.database import get_db
 
 

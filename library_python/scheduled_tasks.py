@@ -1,12 +1,4 @@
-from config.config import Config  # Đảm bảo đã import Config
-"""
-Scheduled background tasks for the library system.
-
-Tasks include:
-- Auto-cancelling expired pickup requests (every hour)
-- Sending due date reminders (daily)
-- ✅ FIXED: Notifying users about cancelled pickups
-"""
+from config.config import Config
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
@@ -15,7 +7,6 @@ from models.notification import Notification
 from models.system_log import SystemLog
 from models.database import get_db
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -23,7 +14,7 @@ logger = logging.getLogger(__name__)
 def auto_cancel_expired_pickups():
     """Scheduled task: Cancel pickup requests exceeding 48-hour deadline.
     
-    ✅ FIXED: Now sends notification to user when pickup is auto-cancelled
+    Now sends notification to user when pickup is auto-cancelled
     
     Runs every hour to check for expired pending_pickup borrows.
     """

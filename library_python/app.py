@@ -7,9 +7,7 @@ Refactored with Clean Architecture:
 - English comments and docstrings
 """
 import atexit
-
 from flask import Flask, g, session
-
 from config.config import Config
 from extensions import socketio
 from models import Guest, Notification, User, init_db

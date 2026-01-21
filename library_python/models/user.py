@@ -1,16 +1,11 @@
-"""User model module.
-
-Acts as a Factory for User/Staff/Admin and handles payment logic.
-"""
 import json
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from models.book import Book
 from werkzeug.security import check_password_hash, generate_password_hash
-
 from models.database import get_db
-from models.guest import Guest  # Import chuẩn, đã loại bỏ block try/except dự phòng
+from models.guest import Guest 
 
 class User:
     @staticmethod
@@ -27,9 +22,7 @@ class User:
         self.email = email
         self.name = name
         self.role = role
-        # Xử lý an toàn cho fines
         self.fines = float(fines) if fines is not None else 0.0
-        # Xử lý an toàn cho favorites
         if isinstance(favorites, str):
             try:
                 self.favorites = json.loads(favorites)
@@ -38,7 +31,6 @@ class User:
         else:
             self.favorites = favorites if favorites else []
             
-        # Các thuộc tính khác từ kwargs
         self.phone = kwargs.get('phone')
         self.birthday = kwargs.get('birthday')
         self.member_since = kwargs.get('member_since')
@@ -140,8 +132,6 @@ class User:
 
     def pay_fine(self, amount: float) -> Tuple[bool, str]:
         """Pay fine amount and update violation records.
-        
-        ✅ FIXED: Now updates violations_history status to 'paid'
         """
         if amount <= 0 or self.fines <= 0:
             return False, "No fines to pay or invalid amount"
@@ -157,7 +147,7 @@ class User:
                 (self.fines, self.id)
             )
 
-            # 2. ✅ FIXED: Update violations_history to mark as paid
+            # 2. Update violations_history to mark as paid
             # Update violation records associated with this user to 'paid' status
             db.execute(
                 "UPDATE violations_history SET payment_status = 'paid' "
@@ -301,14 +291,8 @@ class User:
         return [get_user_by_role(dict(r)) for r in rows]
 
     def get_book_interaction_status(self, book_id: str, book_obj=None) -> dict:
-        """
-        Kiểm tra toàn bộ trạng thái tương tác giữa User và Book.
-        Trả về dict chứa tất cả flags cần thiết cho template.
-        """
         from models.borrow import Borrow
         from models.review import Review
-        # from models.reservation import Reservation (Not used directly here but implied)
-
         status = {
             'is_favorite': book_id in self.favorites,
             'can_borrow': False,
