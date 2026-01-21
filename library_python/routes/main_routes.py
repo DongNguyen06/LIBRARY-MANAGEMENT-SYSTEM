@@ -2,6 +2,7 @@ from flask import Blueprint, flash, g, redirect, render_template, request, url_f
 from models.book import Book
 from models.borrow import Borrow
 from models.review import Review
+from models.reservation import Reservation  
 
 # Create main blueprint
 main_bp = Blueprint('main', __name__)
@@ -101,16 +102,33 @@ def book_detail(book_id: str):
         'can_review': False,
         'user_review': None
     }
+    
+    # Variable to track reservation status (waiting/ready)
+    user_reservation_status = None
 
     # Get interaction status for logged-in users
     if g.user and hasattr(g.user, 'id') and g.user.id:
+        # Standard status check
         interaction_status = g.user.get_book_interaction_status(book_id, book)
+        
+        # [NEW LOGIC] Check specific reservation status
+        res = Reservation.get_user_book_reservation(g.user.id, book_id)
+        if res:
+            user_reservation_status = res.status
+            
+            # CRITICAL: Override can_borrow if user has a READY reservation
+            # This allows borrowing even if book.available_copies is 0 (Hidden Inventory)
+            if res.status == 'ready':
+                interaction_status['can_borrow'] = True
+                interaction_status['can_reserve'] = False
+                interaction_status['is_reserved'] = False # Hide the "Reserved" button to show "Borrow" instead
 
     return render_template(
         'pages/book_detail.html',
         book=book,
         reviews=reviews,
         rating_stats=rating_stats,
+        user_reservation_status=user_reservation_status, # Pass status to template
         **interaction_status
     )
 

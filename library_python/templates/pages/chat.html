@@ -25,10 +25,7 @@
         <div class="md:col-span-2 bg-white rounded-lg shadow-sm flex flex-col h-full">
             <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
                 <h2 class="font-semibold text-gray-900" id="chat-header">Select a conversation</h2>
-                <span id="connection-status" class="text-xs text-green-600 font-medium hidden">
-                    <i class="fas fa-circle text-[8px] mr-1"></i>Online
-                </span>
-            </div>
+                </div>
 
             <div id="messages-area" class="flex-1 p-4 overflow-y-auto bg-gray-50 space-y-4">
                 <div class="flex flex-col items-center justify-center h-full text-gray-400">
@@ -61,11 +58,9 @@
 </div>
 
 <script>
-    // --- 1. SỬ DỤNG SOCKET TỪ LAYOUT (Tránh kết nối kép) ---
-    // Nếu chưa có (hiếm khi xảy ra nếu layout load đúng), mới tạo mới
+    // --- 1. SỬ DỤNG SOCKET TỪ LAYOUT ---
     const socket = window.socket || io();
     
-    // Trim ID để tránh lỗi so sánh
     const currentUserId = "{{ session.get('user_id') }}".trim(); 
     const currentUserRole = "{{ session.get('user_role') }}";
     let currentPartnerId = null;
@@ -78,62 +73,52 @@
     const chatFormEl = document.getElementById('chat-form');
 
     // --- 2. SOCKET EVENTS ---
-    if(socket.connected) {
-        document.getElementById('connection-status').classList.remove('hidden');
-    }
-    
-    socket.on('connect', () => {
-        console.log('✅ Chat Page Connected');
-        document.getElementById('connection-status').classList.remove('hidden');
-    });
+    // ĐÃ XÓA: Phần xử lý sự kiện 'connect' để hiện trạng thái
 
     socket.on('new_message', (data) => {
-        // 1. Nếu là tin nhắn CỦA MÌNH -> Bỏ qua (vì đã hiện rồi)
         if (data.sender_id === currentUserId) return;
 
-        // 2. Nếu tin nhắn từ partner đang chat -> Hiện lên
         if (currentPartnerId && data.sender_id === currentPartnerId) {
             appendMessageToUI(data);
             scrollToBottom();
         } else {
-            // Reload list để hiện badge mới
             loadConversations(); 
         }
     });
 
-    // --- 3. GỬI TIN NHẮN (OPTIMISTIC UI) ---
+    // --- 3. GỬI TIN NHẮN ---
     chatFormEl.addEventListener('submit', (e) => {
         e.preventDefault();
         const message = messageInputEl.value.trim();
         
         if (message && currentPartnerId) {
-            // 1. Gửi socket
             socket.emit('send_message', {
                 receiver_id: currentPartnerId,
                 message: message
             });
 
-            // 2. HIỆN NGAY LẬP TỨC
             appendMessageToUI({
                 sender_id: currentUserId,
                 message: message,
                 timestamp: new Date().toISOString()
             });
 
-            // 3. Xóa input & Scroll
             messageInputEl.value = '';
             scrollToBottom();
         }
     });
 
     // --- 4. CÁC HÀM UI ---
-    async function loadConversations() {
+    async function loadConversations()
+     {
         try {
             const endpoint = currentUserRole === 'user' ? '/api/chat/staff' : '/api/chat/conversations';
             const res = await fetch(endpoint);
             const data = await res.json();
             if (data.success) renderConversationList(data.staff || data.conversations);
-        } catch (e) console.error(e);
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     async function loadMessages(partnerId) {
@@ -155,7 +140,6 @@
     function appendMessageToUI(msg) {
         const isMe = msg.sender_id === currentUserId;
         
-        // Xử lý thời gian (hỗ trợ cả ISO string và định dạng cũ nếu có)
         let timeDisplay = '';
         if (msg.timestamp) {
              const date = new Date(msg.timestamp);
@@ -217,7 +201,6 @@
 </script>
 
 <style>
-    /* Animation cho tin nhắn mới */
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }

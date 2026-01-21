@@ -1,20 +1,17 @@
+"""Chat message model for real-time messaging.
+
+This module handles creating, retrieving, and managing
+chat messages between users and staff.
+"""
 import uuid
 from datetime import datetime
 from typing import List, Optional
+
 from models.database import get_db
 
 
 class ChatMessage:
-    """Represents a chat message between users and staff.
-
-    Attributes:
-        id: Unique message identifier.
-        sender_id: ID of the message sender.
-        receiver_id: ID of the message receiver.
-        message: Message content.
-        timestamp: When the message was sent.
-        is_read: Whether the message has been read.
-    """
+    """Represents a chat message between users and staff."""
 
     def __init__(self, id: str, sender_id: str, receiver_id: str,
                  message: str, timestamp: str, is_read: int) -> None:
@@ -29,16 +26,7 @@ class ChatMessage:
     @staticmethod
     def create(sender_id: str, receiver_id: str,
                message: str) -> Optional['ChatMessage']:
-        """Create a new chat message.
-
-        Args:
-            sender_id: ID of the message sender.
-            receiver_id: ID of the message receiver.
-            message: Message content.
-
-        Returns:
-            Created ChatMessage instance.
-        """
+        """Create a new chat message."""
         db = get_db()
         message_id = str(uuid.uuid4())
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -53,14 +41,7 @@ class ChatMessage:
 
     @staticmethod
     def get_by_id(message_id: str) -> Optional['ChatMessage']:
-        """Get message by ID.
-
-        Args:
-            message_id: Unique message identifier.
-
-        Returns:
-            ChatMessage instance if found, None otherwise.
-        """
+        """Get message by ID."""
         db = get_db()
         row = db.execute(
             'SELECT * FROM chat_messages WHERE id = ?',
@@ -73,16 +54,7 @@ class ChatMessage:
     @staticmethod
     def get_conversation(user1_id: str, user2_id: str,
                          limit: int = 50) -> List['ChatMessage']:
-        """Get conversation between two users.
-
-        Args:
-            user1_id: First user ID.
-            user2_id: Second user ID.
-            limit: Maximum number of messages to retrieve.
-
-        Returns:
-            List of ChatMessage instances ordered oldest first.
-        """
+        """Get conversation between two users."""
         db = get_db()
         rows = db.execute('''
             SELECT * FROM chat_messages 
@@ -97,14 +69,7 @@ class ChatMessage:
 
     @staticmethod
     def get_unread_count(user_id: str) -> int:
-        """Get count of unread messages for a user.
-
-        Args:
-            user_id: User ID.
-
-        Returns:
-            Number of unread messages.
-        """
+        """Get count of unread messages for a user."""
         db = get_db()
         row = db.execute('''
             SELECT COUNT(*) as count FROM chat_messages 
@@ -114,12 +79,7 @@ class ChatMessage:
 
     @staticmethod
     def mark_as_read(user_id: str, sender_id: str) -> None:
-        """Mark all messages from sender to user as read.
-
-        Args:
-            user_id: Receiver user ID.
-            sender_id: Sender user ID.
-        """
+        """Mark all messages from sender to user as read."""
         db = get_db()
         db.execute('''
             UPDATE chat_messages 
@@ -130,14 +90,7 @@ class ChatMessage:
 
     @staticmethod
     def get_recent_conversations(user_id: str) -> List[dict]:
-        """Get list of recent conversations for a user.
-
-        Args:
-            user_id: User ID.
-
-        Returns:
-            List of conversation dictionaries with partner info.
-        """
+        """Get list of recent conversations for a user."""
         db = get_db()
 
         rows = db.execute('''
@@ -156,8 +109,6 @@ class ChatMessage:
         conversations = []
         for row in rows:
             partner_id = row['partner_id']
-
-            # Get last message
             last_msg = db.execute('''
                 SELECT * FROM chat_messages
                 WHERE (sender_id = ? AND receiver_id = ?) 
@@ -166,7 +117,6 @@ class ChatMessage:
                 LIMIT 1
             ''', (user_id, partner_id, partner_id, user_id)).fetchone()
 
-            # Get unread count
             unread = db.execute('''
                 SELECT COUNT(*) as count FROM chat_messages
                 WHERE sender_id = ? AND receiver_id = ? AND is_read = 0
@@ -182,11 +132,6 @@ class ChatMessage:
         return conversations
 
     def to_dict(self) -> dict:
-        """Convert message to dictionary.
-
-        Returns:
-            Dictionary representation of the message.
-        """
         return {
             'id': self.id,
             'sender_id': self.sender_id,
@@ -201,6 +146,7 @@ class ChatMessage:
     @staticmethod
     def send_message(sender_id: str, receiver_id: str,
                      message: str) -> tuple:
+        """Send a chat message without checking online status."""
         from models.user import User
         
         if not message or not message.strip():
@@ -212,24 +158,19 @@ class ChatMessage:
         if not sender or not receiver:
             return None, "Invalid sender or receiver"
 
+        # Create message - always save to DB
         chat_message = ChatMessage.create(sender_id, receiver_id, message.strip())
         
         if chat_message:
-            from app import online_users 
-            
-            if receiver_id not in online_users:
-                status = "Message saved. User is currently offline and will see it when they log in."
-            else:
-                status = "Message sent successfully"
-            
-            return chat_message, status
+            # ĐÃ XÓA: Logic check online_users
+            return chat_message, "Message sent successfully"
         
         return None, "Failed to save message"
 
     @staticmethod
     def get_unread_messages(user_id: str) -> list:
+        """Get unread messages for a user."""
         db = get_db()
-        
         rows = db.execute('''
             SELECT * FROM chat_messages 
             WHERE receiver_id = ? AND is_read = 0
@@ -241,9 +182,7 @@ class ChatMessage:
 
     @staticmethod
     def get_staff_availability() -> dict:
-        from app import online_users
-        from models.user import User
-        
+        """Get staff list without online/offline status distinction."""
         db = get_db()
         
         # Get all staff members
@@ -254,30 +193,25 @@ class ChatMessage:
         ''').fetchall()
         
         available_staff = []
-        offline_staff = []
         
+        # Tất cả staff đều được đưa vào danh sách available (chỉ còn là danh sách nhân viên)
         for staff in staff_list:
-            if staff['id'] in online_users:
-                available_staff.append({
-                    'id': staff['id'],
-                    'name': staff['name'],
-                    'status': 'online'
-                })
-            else:
-                offline_staff.append({
-                    'id': staff['id'],
-                    'name': staff['name'],
-                    'status': 'offline'
-                })
+            available_staff.append({
+                'id': staff['id'],
+                'name': staff['name'],
+                # Có thể bỏ field status hoặc để mặc định nếu frontend cũ cần
+                'status': 'available' 
+            })
         
         return {
             'available': available_staff,
-            'offline': offline_staff,
-            'staff_online': len(available_staff) > 0
+            'offline': [], # Danh sách rỗng
+            'staff_online': True # Luôn True để hiển thị danh sách
         }
 
     @staticmethod
     def get_recent_conversations_with_details(user_id: str) -> List[dict]:
+        """Get recent conversations with user details."""
         from models.user import User
 
         conversations = ChatMessage.get_recent_conversations(user_id)
@@ -293,8 +227,8 @@ class ChatMessage:
 
     @staticmethod
     def get_available_staff() -> List[dict]:
+        """Get list of staff/admin members available for chat."""
         db = get_db()
-
         rows = db.execute('''
             SELECT id, name, email FROM users 
             WHERE role IN ('staff', 'admin')

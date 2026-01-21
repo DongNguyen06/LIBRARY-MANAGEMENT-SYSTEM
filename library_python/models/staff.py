@@ -18,8 +18,9 @@ class Staff(User):
             Dictionary with interaction flags (can_review always False).
         """
         status = super().get_book_interaction_status(book_id, book_obj)
+        # CRITICAL: Staff cannot review (read-only)
         status['can_review'] = False
-        status['user_review'] = None 
+        status['user_review'] = None  # Don't show review form
         return status
     
     def approve_borrow_request(self, borrow_id: str) -> Tuple[bool, str]:

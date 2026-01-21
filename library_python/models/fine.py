@@ -15,6 +15,8 @@ class Fine:
     def create(user_id, amount, reason, borrow_id=None):
         """Create violation record and track fine amount.
         
+        Properly handles violations_history table creation
+        
         Args:
             user_id: User who incurred the fine
             amount: Fine amount (VND)

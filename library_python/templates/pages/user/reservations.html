@@ -4,237 +4,121 @@
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">My Book Reservations</h1>
-        <p class="text-gray-600">Track your book reservations and pickup status</p>
-    </div>
-
-    <!-- Cancel Reservation Modal -->
-    <div id="cancelReservationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full transform transition-all">
-            <div class="p-6">
-                <div class="flex items-center justify-center w-16 h-16 mx-auto bg-red-100 rounded-full mb-4">
-                    <i class="fas fa-exclamation-triangle text-3xl text-red-600"></i>
-                </div>
-                <h3 class="text-2xl font-bold text-gray-900 text-center mb-2">Hủy đặt trước</h3>
-                <p class="text-gray-600 text-center mb-6">
-                    Bạn có chắc muốn hủy đặt trước sách <br>
-                    <span class="font-semibold text-gray-900" id="cancelBookTitle"></span>?
-                </p>
-                <div class="flex gap-3">
-                    <button type="button" onclick="closeCancelModal()" class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-semibold transition-all">
-                        <i class="fas fa-arrow-left mr-2"></i> Quay lại
-                    </button>
-                    <button type="button" onclick="confirmCancelReservation()" class="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-all shadow-lg">
-                        <i class="fas fa-check mr-2"></i> Xác nhận hủy
-                    </button>
-                </div>
-            </div>
-        </div>
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">My Reservations</h1>
+        <a href="{{ url_for('main.search') }}" class="text-blue-600 hover:text-blue-800 font-medium">
+            <i class="fas fa-plus mr-1"></i> Reserve More Books
+        </a>
     </div>
 
     {% if reservations %}
-    <div class="space-y-4">
-        {% for reservation in reservations %}
-        {% set book = reservation.get_book() %}
-        {% if book %}
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div class="flex gap-6">
-                <!-- Book Cover -->
-                <div class="flex-shrink-0">
-                    <img src="{{ book.cover_image if book.cover_image else url_for('static', filename='images/default-book.jpg') }}" 
-                         alt="{{ book.title }}" 
-                         class="w-32 h-48 object-cover rounded-lg shadow-md">
-                </div>
-
-                <!-- Book Details -->
-                <div class="flex-1">
-                    <div class="flex items-start justify-between mb-3">
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-900 mb-1">{{ book.title }}</h3>
-                            <p class="text-gray-600">by {{ book.author }}</p>
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+        <ul class="divide-y divide-gray-200">
+            {% for res in reservations %}
+            {% set book = res.get_book() %}
+            
+            <li>
+                <div class="px-4 py-4 sm:px-6 hover:bg-gray-50 transition duration-150">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            {% if book %}
+                                <img src="{{ book.cover_url if book.cover_url else url_for('static', filename='images/default-book.jpg') }}" 
+                                     alt="{{ book.title }}" 
+                                     class="h-16 w-12 object-cover rounded shadow-sm">
+                            {% else %}
+                                <div class="h-16 w-12 bg-gray-200 rounded flex items-center justify-center">
+                                    <i class="fas fa-book text-gray-400"></i>
+                                </div>
+                            {% endif %}
+                            
+                            <div>
+                                <h3 class="text-lg font-medium text-blue-600">
+                                    <a href="{{ url_for('main.book_detail', book_id=res.book_id) }}">
+                                        {{ book.title if book else 'Unknown Book' }}
+                                    </a>
+                                </h3>
+                                <div class="mt-1 flex items-center gap-4 text-sm text-gray-500">
+                                    <span>
+                                        <i class="fas fa-calendar-alt mr-1"></i>
+                                        Reserved: {{ res.reservation_date.split(' ')[0] }}
+                                    </span>
+                                    
+                                    {% if res.status == 'waiting' %}
+                                    <span>
+                                        <i class="fas fa-list-ol mr-1"></i>
+                                        Position: #{{ res.queue_position }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
                         </div>
-                        
-                        {% if reservation.status == 'waiting' %}
-                        <span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm font-medium rounded-full">
-                            <i class="fas fa-clock mr-1"></i>Waiting in Queue
-                        </span>
-                        {% elif reservation.status == 'ready' %}
-                        <span class="px-3 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full">
-                            <i class="fas fa-check-circle mr-1"></i>Ready for Pickup
-                        </span>
-                        {% elif reservation.status == 'expired' %}
-                        <span class="px-3 py-1 bg-red-100 text-red-800 text-sm font-medium rounded-full">
-                            <i class="fas fa-times-circle mr-1"></i>Expired
-                        </span>
-                        {% elif reservation.status == 'cancelled' %}
-                        <span class="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-medium rounded-full">
-                            <i class="fas fa-ban mr-1"></i>Cancelled
-                        </span>
-                        {% endif %}
-                    </div>
 
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <p class="text-sm text-gray-600">Reserved On</p>
-                            <p class="font-medium text-gray-900">{{ reservation.created_at }}</p>
+                        <div class="flex items-center gap-4">
+                            <div>
+                                {% if res.status == 'waiting' %}
+                                    <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                        <i class="fas fa-clock mr-1 mt-0.5"></i> Waiting
+                                    </span>
+                                {% elif res.status == 'ready' %}
+                                    <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800 animate-pulse">
+                                        <i class="fas fa-check-circle mr-1 mt-0.5"></i> Ready for Pickup
+                                    </span>
+                                {% elif res.status == 'completed' %}
+                                    <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                        <i class="fas fa-history mr-1 mt-0.5"></i> Completed
+                                    </span>
+                                {% elif res.status == 'cancelled' %}
+                                    <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                        <i class="fas fa-ban mr-1 mt-0.5"></i> Cancelled
+                                    </span>
+                                {% else %}
+                                    <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                        {{ res.status|title }}
+                                    </span>
+                                {% endif %}
+                            </div>
+
+                            <div class="flex flex-col gap-2 min-w-[140px]">
+                                
+                                {% if res.status == 'ready' %}
+                                    <form action="{{ url_for('user.borrow_book', book_id=res.book_id) }}" method="POST">
+                                        <button type="submit" 
+                                                class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 shadow-sm transition-all">
+                                            <i class="fas fa-hand-holding-heart mr-2"></i> Borrow Now
+                                        </button>
+                                        <p class="text-xs text-red-500 text-center mt-1">
+                                            Expires: <span class="font-bold">{{ res.hold_until }}</span>
+                                        </p>
+                                    </form>
+                                {% endif %}
+
+                                {% if res.status in ['waiting', 'ready'] %}
+                                    <form action="{{ url_for('user.cancel_reservation', reservation_id=res.id) }}" 
+                                          method="POST"
+                                          onsubmit="return confirm('Are you sure you want to cancel this reservation?');">
+                                        <button type="submit" 
+                                                class="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all">
+                                            <i class="fas fa-times mr-2"></i> Cancel
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                
+                            </div>
                         </div>
-                        
-                        {% if reservation.status == 'waiting' %}
-                        <div>
-                            <p class="text-sm text-gray-600">Queue Position</p>
-                            <p class="font-medium text-gray-900">
-                                <i class="fas fa-users mr-1"></i>Position {{ reservation.get_queue_position() }}
-                            </p>
-                        </div>
-                        {% endif %}
-
-                        {% if reservation.status == 'ready' and reservation.hold_until %}
-                        <div>
-                            <p class="text-sm text-gray-600">Pickup Deadline</p>
-                            <p class="font-medium text-red-600">
-                                <i class="fas fa-exclamation-triangle mr-1"></i>{{ reservation.hold_until }}
-                            </p>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <!-- Status Messages -->
-                    {% if reservation.status == 'waiting' %}
-                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                        <p class="text-sm text-blue-900">
-                            <i class="fas fa-info-circle mr-2"></i>
-                            <strong>Your book is reserved!</strong> You're in the queue. We'll notify you when it's ready for pickup.
-                        </p>
-                    </div>
-                    {% elif reservation.status == 'ready' %}
-                    <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex justify-between items-center">
-                        <p class="text-sm text-green-900">
-                            <i class="fas fa-bell mr-2"></i>
-                            <strong>Book is ready!</strong> Please borrow it within 48 hours.
-                        </p>
-                    </div>
-                    {% endif %}
-
-                    <!-- Actions -->
-                    <div class="flex gap-3">
-                        <a href="{{ url_for('main.book_detail', book_id=book.id) }}" 
-                           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
-                            <i class="fas fa-eye mr-1"></i>View Book
-                        </a>
-                        
-                        {% if reservation.status == 'ready' %}
-                        <button onclick="borrowFromReservation('{{ book.id }}')" 
-                                class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-semibold shadow-md animate-pulse">
-                            <i class="fas fa-book mr-1"></i> Borrow Now
-                        </button>
-                        {% endif %}
-                        
-                        {% if reservation.status in ['waiting', 'ready'] %}
-                        <button onclick="cancelReservation('{{ reservation.id }}', '{{ book.title|replace("'", "\\'") }}')" 
-                                class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">
-                            <i class="fas fa-times mr-1"></i>Cancel Reservation
-                        </button>
-                        {% endif %}
                     </div>
                 </div>
-            </div>
-        </div>
-        {% endif %}
-        {% endfor %}
+            </li>
+            {% endfor %}
+        </ul>
     </div>
     {% else %}
-    <!-- Empty State -->
-    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
-        <div class="max-w-md mx-auto">
-            <i class="fas fa-bookmark text-6xl text-gray-300 mb-4"></i>
-            <h3 class="text-xl font-bold text-gray-900 mb-2">No Active Reservations</h3>
-            <p class="text-gray-600 mb-6">You haven't reserved any books yet. Reserve a book when it's not available and we'll notify you when it's ready!</p>
-            <a href="{{ url_for('main.search') }}" class="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                <i class="fas fa-search mr-2"></i>Browse Books
-            </a>
-        </div>
+    <div class="text-center py-12 bg-white rounded-lg shadow-sm">
+        <i class="fas fa-bookmark text-4xl text-gray-300 mb-4"></i>
+        <p class="text-gray-500 text-lg">You don't have any active reservations.</p>
+        <a href="{{ url_for('main.search') }}" class="mt-4 inline-block text-blue-600 hover:text-blue-800 font-medium">
+            Browse books to reserve &rarr;
+        </a>
     </div>
     {% endif %}
 </div>
-
-<script>
-// Moved variable declarations to the top to fix ReferenceError
-let currentReservationId = null;
-let isCancelling = false;
-
-function cancelReservation(reservationId, bookTitle) {
-    currentReservationId = reservationId;
-    document.getElementById('cancelBookTitle').textContent = `"${bookTitle}"`;
-    document.getElementById('cancelReservationModal').classList.remove('hidden');
-}
-
-function closeCancelModal() {
-    document.getElementById('cancelReservationModal').classList.add('hidden');
-    currentReservationId = null;
-}
-
-// Confirm cancellation
-function confirmCancelReservation() {
-    // Prevent duplicate requests
-    if (isCancelling) {
-        console.log('Cancel already in progress');
-        return;
-    }
-    
-    if (!currentReservationId) {
-        alert('Không tìm thấy thông tin đặt trước');
-        return;
-    }
-    
-    isCancelling = true;
-    const modal = document.getElementById('cancelReservationModal');
-    
-    // Close modal and show loading in all cancel buttons
-    modal.classList.add('hidden');
-    const allCancelButtons = document.querySelectorAll('button[onclick*="cancelReservation"]');
-    allCancelButtons.forEach(btn => {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Đang hủy...';
-    });
-    
-    fetch(`/api/cancel-reservation/${currentReservationId}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // Show success and reload
-            allCancelButtons.forEach(btn => {
-                btn.className = 'px-4 py-2 bg-green-600 text-white rounded-lg text-sm';
-                btn.innerHTML = '<i class="fas fa-check-circle mr-1"></i>Đã hủy!';
-            });
-            
-            setTimeout(() => {
-                location.reload();
-            }, 1500);
-        } else {
-            isCancelling = false;
-            alert(data.message || 'Có lỗi xảy ra. Vui lòng thử lại.');
-            location.reload();
-        }
-    })
-    .catch(error => {
-        isCancelling = false;
-        console.error('Error:', error);
-        alert('Có lỗi xảy ra. Vui lòng thử lại.');
-        location.reload();
-    });
-}
-
-function borrowFromReservation(bookId) {
-    // Implement the borrowing logic here
-    console.log('Borrowing book with ID:', bookId);
-    // Example: Redirect to the borrowing page or open a borrowing modal
-    // window.location.href = `/borrow-book/${bookId}`;
-}
-</script>
 {% endblock %}

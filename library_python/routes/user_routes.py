@@ -1,11 +1,12 @@
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for, g
 from models.borrow import Borrow
 from models.reservation import Reservation
 from models.user import User
+from models.book import Book
 from utils.decorators import login_required, role_required
 
 # Create user blueprint
-user_bp = Blueprint('user', __name__)
+user_bp = Blueprint('user', __name__, url_prefix='/user')
 
 
 @user_bp.route('/dashboard')
@@ -131,3 +132,46 @@ def notifications():
         Rendered notifications template.
     """
     return render_template('pages/user/notifications.html')
+
+
+@user_bp.route('/borrow/<book_id>', methods=['POST'])
+@login_required
+def borrow_book(book_id):
+    """Handle book borrowing request from User Dashboard/Reservation page.
+    
+    This route now supports PRIORITY CLAIMING for reservations.
+    If the user has a 'ready' reservation, Borrow.create will detect it
+    and allow borrowing even if available_copies is 0.
+    """
+    # Gọi hàm create (đã chứa logic Hidden Inventory)
+    borrow, message = Borrow.create(g.user.id, book_id)
+    
+    if borrow:
+        flash(message, 'success')
+        # Nếu đang ở trang reservations thì reload lại trang đó
+        if 'reservations' in request.referrer:
+            return redirect(url_for('user.reservations'))
+        return redirect(url_for('user.borrowed_books'))
+    else:
+        flash(message, 'error')
+        return redirect(request.referrer or url_for('main.book_detail', book_id=book_id))
+
+
+@user_bp.route('/reservation/cancel/<reservation_id>', methods=['POST'])
+@login_required
+def cancel_reservation(reservation_id):
+    """Cancel a reservation."""
+    res = Reservation.get_by_id(reservation_id)
+    
+    # Validation: Chỉ chủ sở hữu mới được hủy
+    if not res or res.user_id != g.user.id:
+        flash('Reservation not found or access denied', 'error')
+        return redirect(url_for('user.reservations'))
+    
+    success, msg = res.cancel()
+    if success:
+        flash(msg, 'success')
+    else:
+        flash(msg, 'error')
+        
+    return redirect(url_for('user.reservations'))

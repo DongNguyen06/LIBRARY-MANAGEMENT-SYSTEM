@@ -1,10 +1,4 @@
-"""Flask extensions initialization module.
-
-This module initializes all Flask extensions to prevent circular imports.
-Extensions are initialized here and imported into app.py and other modules.
-"""
 from typing import Optional
-
 from flask_socketio import SocketIO
 
 # Initialize SocketIO without app binding

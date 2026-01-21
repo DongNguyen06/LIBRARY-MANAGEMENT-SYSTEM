@@ -54,3 +54,21 @@ class SystemLog:
         ''', (limit,)).fetchall()
 
         return [dict(log) for log in logs]
+
+    @staticmethod
+    def clear_old_logs(days: int = 30) -> bool:
+        """Clear logs older than specified days.
+
+        Args:
+            days: Number of days to keep logs.
+
+        Returns:
+            True if operation completed successfully.
+        """
+        db = get_db()
+        cutoff_date = datetime.now() - timedelta(days=days)
+        cutoff_str = cutoff_date.strftime('%Y-%m-%d')
+
+        db.execute('DELETE FROM system_logs WHERE timestamp < ?', (cutoff_str,))
+        db.commit()
+        return True

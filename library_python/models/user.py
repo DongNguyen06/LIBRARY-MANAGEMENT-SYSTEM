@@ -5,7 +5,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from models.book import Book
 from werkzeug.security import check_password_hash, generate_password_hash
 from models.database import get_db
-from models.guest import Guest 
+from models.guest import Guest
 
 class User:
     @staticmethod
@@ -132,6 +132,8 @@ class User:
 
     def pay_fine(self, amount: float) -> Tuple[bool, str]:
         """Pay fine amount and update violation records.
+        
+        ✅ FIXED: Now updates violations_history status to 'paid'
         """
         if amount <= 0 or self.fines <= 0:
             return False, "No fines to pay or invalid amount"
@@ -291,8 +293,14 @@ class User:
         return [get_user_by_role(dict(r)) for r in rows]
 
     def get_book_interaction_status(self, book_id: str, book_obj=None) -> dict:
+        """
+        Kiểm tra toàn bộ trạng thái tương tác giữa User và Book.
+        Trả về dict chứa tất cả flags cần thiết cho template.
+        """
         from models.borrow import Borrow
         from models.review import Review
+        # from models.reservation import Reservation (Not used directly here but implied)
+
         status = {
             'is_favorite': book_id in self.favorites,
             'can_borrow': False,

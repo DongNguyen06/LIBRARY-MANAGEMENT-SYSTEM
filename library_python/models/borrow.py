@@ -1,15 +1,16 @@
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
-
+import uuid
 from config.config import Config
 from models.book import Book
 from models.database import get_db
 
 
 class Borrow:
+    
     @staticmethod
     def get_expired_pickups_details(hours=48):
-        """Lấy danh sách chi tiết các đơn pending quá hạn để gửi thông báo."""
+        """Get details of expired pending pickups for notification."""
         db = get_db()
         limit_time = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
         return db.execute('''
@@ -34,7 +35,6 @@ class Borrow:
         self.condition = condition
         self.damage_fee = float(damage_fee) if damage_fee else 0.0
         self.late_fee = float(late_fee) if late_fee else 0.0
-    
     
     @property
     def is_pending(self) -> bool:
@@ -93,17 +93,8 @@ class Borrow:
         else:
             return 0.0
 
-
     @staticmethod
     def create(user_id, book_id):
-        """Create new borrow request with PRIORITY RESERVATION SUPPORT.
-        
-        REFACTORED: Implements "Hidden Inventory" logic
-        - Users with ready reservations can claim books even when available_copies = 0
-        - These books are in "hidden pool" waiting for the reserver
-        - Public users cannot see/claim these hidden copies
-        """
-        import uuid
         from models.reservation import Reservation
         
         db = get_db()
@@ -311,7 +302,6 @@ class Borrow:
             message += f". Late fee: {self.late_fee:,.0f} VND, Damage fee: {self.damage_fee:,.0f} VND"
         return True, message
 
-    
     def renew(self, extension_days=7) -> Tuple[bool, str]:
         """Renew borrowed book with proper business rules."""
         if self.status != 'borrowed':
@@ -353,7 +343,14 @@ class Borrow:
         return True, f"Book renewed successfully. New due date: {self.due_date}"
     
     def cancel(self) -> Tuple[bool, str]:
-        """Cancel borrow request and restore book availability."""
+        """Cancel borrow request and handle inventory safely.
+        
+        FIXED LOGIC (Double Counting Bug):
+        - Old logic: Always +1 to available_copies.
+        - New logic: 
+            1. If there are reservations waiting: Pass book to next reserver (Available copies stays +0).
+            2. If no reservations: Return book to public inventory (Available copies +1).
+        """
         if self.status not in ['pending_pickup']:
             return False, "Only pending pickup requests can be cancelled"
 
@@ -361,48 +358,64 @@ class Borrow:
         from models.system_log import SystemLog
         
         db = get_db()
+        
+        # 1. Mark borrow request as cancelled
         self.status = 'cancelled'
-
         db.execute(
             'UPDATE borrows SET status = ? WHERE id = ?',
             ('cancelled', self.id)
         )
 
         book = Book.get_by_id(self.book_id)
-        if book:
-            book.update_available_copies(1)
+        if not book:
+            db.rollback()
+            return False, "Book associated with this borrow request not found"
 
-        if Reservation.has_active_reservations(self.book_id):
-            waiting_reservations = db.execute('''
-                SELECT * FROM reservations 
-                WHERE book_id = ? AND status = 'waiting'
-                ORDER BY queue_position ASC
-            ''', (self.book_id,)).fetchall()
+        # 2. [CRITICAL] Check if there are reservations waiting
+        # Instead of returning to public inventory, prioritize passing to reserver.
+        
+        next_reservation = Reservation.get_next_in_queue(self.book_id)
+        
+        if next_reservation:
+            # === CASE 1: RESERVATION EXISTS ===
+            # Transfer borrow right to next person (User B)
+            # DO NOT increase available_copies (Book remains in "Hidden Inventory")
             
-            for idx, res_row in enumerate(waiting_reservations, start=1):
-                db.execute(
-                    'UPDATE reservations SET queue_position = ? WHERE id = ?',
-                    (idx, res_row['id'])
+            success, msg = next_reservation.mark_ready(hold_hours=48)
+            
+            if success:
+                SystemLog.add(
+                    'Borrow Cancelled - Cascaded',
+                    f'Borrow request cancelled by {self.user_id}. Book transferred directly to reservation #{next_reservation.id}. Inventory NOT increased.',
+                    'info',
+                    self.user_id
                 )
-            
-            first_reservation = Reservation.get_next_in_queue(self.book_id)
-            if first_reservation:
-                first_reservation.mark_ready(hold_hours=48)
-
-        db.commit()
-
-        user = self.get_user()
-        if user and book:
+            else:
+                # If reservation activation fails -> Return to public inventory
+                book.update_available_copies(1)
+                SystemLog.add(
+                    'Borrow Cancelled - Cascade Failed',
+                    f'Borrow cancelled but failed to notify reserver. Book returned to public.',
+                    'warning',
+                    self.user_id
+                )
+        else:
+            # === CASE 2: NO RESERVATIONS ===
+            # Return book to public inventory normally (+1)
+            book.update_available_copies(1)
             SystemLog.add(
-                'Borrow Request Cancelled',
-                f'{user.name} cancelled pending pickup for "{book.title}"',
+                'Borrow Cancelled - Returned to Public',
+                f'Borrow request cancelled. No reservations pending. Book returned to public inventory (+1).',
                 'info',
                 self.user_id
             )
 
+        # Handle reservation queue updates (if needed)
+        
+        db.commit()
+
         return True, "Borrow request cancelled successfully"
 
-    
     @staticmethod
     def auto_cancel_expired_pickups():
         """Auto-cancel all pickup requests that exceeded 48-hour deadline."""

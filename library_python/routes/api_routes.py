@@ -42,7 +42,7 @@ def get_books():
 def borrow_book(book_id: str):
     """Create a borrow request for a book.
     
-    sends notification to user confirming the borrow request
+    Now sends notification to user confirming the borrow request
     
     Args:
         book_id: Book identifier.

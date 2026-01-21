@@ -519,7 +519,16 @@
                                         <a href="{{ url_for('main.book_detail', book_id=book.id) }}" class="text-blue-600 hover:text-blue-700 text-sm">
                                             <i class="fas fa-eye"></i> View
                                         </a>
-                                        <button onclick="editBook('{{ book.id }}', '{{ book.title }}', '{{ book.author }}', '{{ book.description }}', {{ book.total_copies }}, {{ book.available_copies }})" class="text-green-600 hover:text-green-700 text-sm">
+                                        <button 
+                                            type="button"
+                                            onclick="openEditModal(this)"
+                                            data-id="{{ book.id }}"
+                                            data-title="{{ book.title }}"
+                                            data-author="{{ book.author }}"
+                                            data-description="{{ book.description }}"
+                                            data-total="{{ book.total_copies }}"
+                                            data-available="{{ book.available_copies }}"
+                                            class="text-green-600 hover:text-green-700 text-sm">
                                             <i class="fas fa-edit"></i> Edit
                                         </button>
                                     </div>
@@ -619,13 +628,24 @@ function filterBooks() {
     });
 }
 
-function editBook(bookId, title, author, description, totalCopies, availableCopies) {
+function openEditModal(button) {
+    // Lấy dữ liệu từ data attributes
+    const bookId = button.getAttribute('data-id');
+    const title = button.getAttribute('data-title');
+    const author = button.getAttribute('data-author');
+    const description = button.getAttribute('data-description');
+    const totalCopies = button.getAttribute('data-total');
+    const availableCopies = button.getAttribute('data-available');
+
+    // Điền dữ liệu vào form
     document.getElementById('edit_book_id').value = bookId;
     document.getElementById('edit_title').value = title;
     document.getElementById('edit_author').value = author;
     document.getElementById('edit_description').value = description || '';
     document.getElementById('edit_total_copies').value = totalCopies;
     document.getElementById('edit_available_copies').value = availableCopies;
+    
+    // Hiển thị modal
     document.getElementById('editBookModal').classList.remove('hidden');
 }
 

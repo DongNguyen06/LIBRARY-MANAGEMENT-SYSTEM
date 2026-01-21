@@ -48,7 +48,7 @@
                         </a>
                     {% else %}
                         <!-- Notifications (only for users) -->
-                        {% if current_user.role == 'user' %}
+                        {% if current_user and current_user.role == 'user' %}
                             <a href="{{ url_for('user.notifications') }}" class="p-2 text-gray-700 hover:text-blue-600">
                                 <i class="fas fa-bell text-xl"></i>
                             </a>
@@ -63,7 +63,7 @@
                         {% endif %}
 
                         <!-- Chat (for staff and admin) -->
-                        {% if current_user.role in ['staff', 'admin'] %}
+                        {% if current_user and current_user.role in ['staff', 'admin'] %}
                             <button onclick="openChatWindow()" class="relative p-2 text-gray-700 hover:text-blue-600">
                                 <i class="fas fa-comments text-xl"></i>
                                 <span id="chatBadgeIcon" class="hidden absolute -top-1 -right-1 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
@@ -76,12 +76,12 @@
                         <div class="relative" id="userDropdown">
                             <button onclick="toggleUserDropdown()" class="flex items-center gap-2 px-3 py-2 text-gray-700 hover:text-blue-600">
                                 <i class="fas fa-user-circle text-2xl"></i>
-                                <span>{{ current_user.name }}</span>
+                                <span>{{ current_user.name if current_user and current_user.name else '' }}</span>
                                 <i class="fas fa-chevron-down text-sm"></i>
                             </button>
                             
                             <div id="userDropdownMenu" class="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg py-2 hidden z-50">
-                                {% if current_user.role == 'user' %}
+                                {% if current_user and current_user.role == 'user' %}
                                     <a href="{{ url_for('user.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-dashboard mr-2"></i> Dashboard
                                     </a>
@@ -97,11 +97,11 @@
                                     <a href="{{ url_for('user.favorites') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-heart mr-2"></i> Favorites
                                     </a>
-                                {% elif current_user.role == 'staff' %}
+                                {% elif current_user and current_user.role == 'staff' %}
                                     <a href="{{ url_for('staff.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-dashboard mr-2"></i> Staff Dashboard
                                     </a>
-                                {% elif current_user.role == 'admin' %}
+                                {% elif current_user and current_user.role == 'admin' %}
                                     <a href="{{ url_for('admin.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                                         <i class="fas fa-dashboard mr-2"></i> Admin Dashboard
                                     </a>
@@ -138,9 +138,19 @@
                 </form>
                 
                 {% if current_user %}
-                    <a href="{{ url_for('user.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
-                        Dashboard
-                    </a>
+                    {% if current_user.role == 'user' %}
+                        <a href="{{ url_for('user.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                            Dashboard
+                        </a>
+                    {% elif current_user.role == 'staff' %}
+                        <a href="{{ url_for('staff.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                            Staff Dashboard
+                        </a>
+                    {% elif current_user.role == 'admin' %}
+                        <a href="{{ url_for('admin.dashboard') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded">
+                            Admin Dashboard
+                        </a>
+                    {% endif %}
                     <a href="{{ url_for('auth.logout') }}" class="block px-4 py-2 text-red-600 hover:bg-gray-100 rounded">
                         Logout
                     </a>
@@ -318,7 +328,7 @@
         }
         const socket = window.socket;
         
-        const currentUserId = '{{ current_user.id }}';
+        const currentUserId = '{{ current_user.id if current_user and current_user.id else '' }}';
         let currentChatPartner = null;
         let isTyping = false;
         let typingTimeout = null;
@@ -348,14 +358,14 @@
         // --- CHAT LOGIC ---
         function openChatWindow() {
             document.getElementById('chatWidget').classList.remove('hidden');
-            {% if current_user.role == 'user' %} loadStaffList(); {% else %} loadConversationsList(); {% endif %}
+            {% if current_user and current_user.role == 'user' %} loadStaffList(); {% else %} loadConversationsList(); {% endif %}
             updateUnreadCount();
         }
         
         function closeChatWindow() {
             document.getElementById('chatWidget').classList.add('hidden');
             currentChatPartner = null;
-            {% if current_user.role == 'user' %} document.getElementById('staffList').classList.remove('hidden'); {% else %} document.getElementById('conversationsList').classList.remove('hidden'); {% endif %}
+            {% if current_user and current_user.role == 'user' %} document.getElementById('staffList').classList.remove('hidden'); {% else %} document.getElementById('conversationsList').classList.remove('hidden'); {% endif %}
             document.getElementById('chatMessages').classList.add('hidden');
             document.getElementById('chatInput').classList.add('hidden');
         }
@@ -446,7 +456,7 @@
         function startChat(pid, pname) {
             currentChatPartner = pid;
             document.getElementById('chatPartnerName').textContent = pname;
-            {% if current_user.role == 'user' %} document.getElementById('staffList').classList.add('hidden'); {% else %} document.getElementById('conversationsList').classList.add('hidden'); {% endif %}
+            {% if current_user and current_user.role == 'user' %} document.getElementById('staffList').classList.add('hidden'); {% else %} document.getElementById('conversationsList').classList.add('hidden'); {% endif %}
             document.getElementById('chatMessages').classList.remove('hidden');
             document.getElementById('chatInput').classList.remove('hidden');
             

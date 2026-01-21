@@ -88,7 +88,6 @@ class Reservation:
             print(f"Error creating reservation: {e}")
             return None, "Failed to create reservation"
     
-    
     @staticmethod
     def get_by_id(reservation_id: str) -> Optional['Reservation']:
         """Get reservation by ID."""
@@ -382,7 +381,26 @@ class Reservation:
         
         db.commit()
         return True, "Reservation marked as expired"
-    
+
+    @staticmethod
+    def auto_expire_reservations():
+        db = get_db()
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        expired_rows = db.execute('''
+            SELECT id FROM reservations 
+            WHERE status = 'ready' AND hold_until < ?
+        ''', (now,)).fetchall()
+        
+        count = 0
+        for row in expired_rows:
+            res = Reservation.get_by_id(row['id'])
+            if res:
+                success, _ = res.mark_expired()
+                if success:
+                    count += 1
+        return count
+
     def complete(self) -> Tuple[bool, str]:
         """Mark reservation as completed (book borrowed).
         

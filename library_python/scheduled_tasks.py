@@ -1,4 +1,3 @@
-from config.config import Config
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
@@ -6,15 +5,16 @@ from models.borrow import Borrow
 from models.notification import Notification
 from models.system_log import SystemLog
 from models.database import get_db
+from models.reservation import Reservation
+from config.config import Config
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 def auto_cancel_expired_pickups():
     """Scheduled task: Cancel pickup requests exceeding 48-hour deadline.
-    
-    Now sends notification to user when pickup is auto-cancelled
     
     Runs every hour to check for expired pending_pickup borrows.
     """
@@ -53,6 +53,33 @@ def auto_cancel_expired_pickups():
         SystemLog.add(
             'Scheduled Task Error',
             f'Failed to auto-cancel pickups: {str(e)}',
+            'error',
+            None
+        )
+
+
+def run_auto_expire_reservations():
+    """Scheduled task: Expire 'ready' reservations that exceeded hold time.
+    
+    This ensures that books held for users in the 'ready' state are passed 
+    to the next person in queue or returned to public inventory if not claimed.
+    """
+    try:
+        expired_count = Reservation.auto_expire_reservations()
+        
+        if expired_count > 0:
+            logger.info(f"Auto-expired {expired_count} unclaimed ready reservations.")
+            SystemLog.add(
+                'Scheduled Task: Auto-expire Reservations',
+                f'Successfully expired {expired_count} unclaimed reservation(s) and triggered cascade.',
+                'system',
+                None
+            )
+    except Exception as e:
+        logger.error(f"Error in run_auto_expire_reservations: {e}")
+        SystemLog.add(
+            'Scheduled Task Error',
+            f'Failed to expire reservations: {str(e)}',
             'error',
             None
         )
@@ -174,6 +201,15 @@ scheduler.add_job(
     hours=1,
     id='auto_cancel_expired_pickups',
     name='Auto-cancel expired pickup requests',
+    replace_existing=True
+)
+
+scheduler.add_job(
+    func=run_auto_expire_reservations,
+    trigger='interval',
+    hours=1,
+    id='auto_expire_reservations',
+    name='Auto-expire unclaimed ready reservations',
     replace_existing=True
 )
 

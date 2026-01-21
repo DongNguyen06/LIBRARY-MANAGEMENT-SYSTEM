@@ -1,32 +1,37 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from models.database import get_db
 
 
 class Book:
+    """Represents a book in the library system.
+    
+    This class handles all book-related operations including searching,
+    borrowing management, and inventory tracking.
+    
+    Attributes:
+        id (str): Unique identifier for the book.
+        title (str): Book title.
+        author (str): Book author name.
+        category (str): Book category/genre.
+        publisher (str): Publisher name.
+        year (int): Publication year.
+        language (str): Book language.
+        isbn (str): ISBN number.
+        description (str): Book description/summary.
+        cover_url (str): URL or path to cover image.
+        total_copies (int): Total number of copies owned.
+        available_copies (int): Number of copies currently available.
+        shelf_location (str): Physical shelf location.
+        rating (float): Average rating from reviews (0.0-5.0).
+        borrow_count (int): Total times this book has been borrowed.
+    """
+    
     def __init__(self, id: str, title: str, author: str, category: str,
                  publisher: str, year: int, language: str, isbn: str,
                  description: str, cover_url: str, total_copies: int,
                  available_copies: int, shelf_location: str,
                  rating: float, borrow_count: int) -> None:
-        """Initialize a Book instance.
-        
-        Args:
-            id: Unique identifier for the book.
-            title: Book title.
-            author: Author name.
-            category: Book category.
-            publisher: Publisher name.
-            year: Publication year.
-            language: Book language.
-            isbn: ISBN number.
-            description: Book description.
-            cover_url: Cover image URL/path.
-            total_copies: Total copies owned.
-            available_copies: Available copies count.
-            shelf_location: Physical location.
-            rating: Average rating.
-            borrow_count: Times borrowed.
-        """
+        """Initialize a Book instance."""
         self.id = id
         self.title = title
         self.author = author
@@ -45,14 +50,7 @@ class Book:
     
     @staticmethod
     def get_by_id(book_id: str) -> Optional['Book']:
-        """Retrieve a book by its ID.
-        
-        Args:
-            book_id: The unique identifier of the book.
-            
-        Returns:
-            Book instance if found, None otherwise.
-        """
+        """Retrieve a book by its ID."""
         db = get_db()
         row = db.execute('''
             SELECT id, title, author, category, publisher, year, language, isbn,
@@ -66,14 +64,7 @@ class Book:
     
     @staticmethod
     def get_by_isbn(isbn: str) -> Optional['Book']:
-        """Retrieve a book by its ISBN number.
-        
-        Args:
-            isbn: The ISBN number to search for.
-            
-        Returns:
-            Book instance if found, None otherwise.
-        """
+        """Retrieve a book by its ISBN number."""
         db = get_db()
         row = db.execute('''
             SELECT id, title, author, category, publisher, year, language, isbn,
@@ -87,14 +78,7 @@ class Book:
     
     @staticmethod
     def get_all(limit: Optional[int] = None) -> List['Book']:
-        """Retrieve all books from the database.
-        
-        Args:
-            limit: Maximum number of books to return. None for all books.
-            
-        Returns:
-            List of Book instances.
-        """
+        """Retrieve all books from the database."""
         db = get_db()
         query = '''SELECT id, title, author, category, publisher, year, language, isbn,
                           description, cover_url, total_copies, available_copies, 
@@ -109,22 +93,7 @@ class Book:
     @staticmethod
     def search(query: str = '', search_by: str = 'title',
                sort_by: str = 'title', category: str = '') -> List['Book']:
-        """Search for books with various filters and sorting options.
-        
-        Args:
-            query: Search query string.
-            search_by: Field to search in ('title', 'author', 'category').
-            sort_by: Sorting criteria ('title', 'author', 'year', 'rating',
-                    'popular', 'new').
-            category: Filter by specific category.
-            
-        Returns:
-            List of matching Book instances.
-            
-        Example:
-            >>> books = Book.search(query='python', search_by='title', 
-            ...                     sort_by='rating')
-        """
+        """Search for books with various filters and sorting options."""
         db = get_db()
         
         sql = '''SELECT id, title, author, category, publisher, year, language, isbn,
@@ -169,15 +138,7 @@ class Book:
     
     @staticmethod
     def get_by_category(category: str, limit: Optional[int] = None) -> List['Book']:
-        """Retrieve books filtered by category.
-        
-        Args:
-            category: Category name to filter by.
-            limit: Maximum number of results. None for all.
-            
-        Returns:
-            List of Book instances in the specified category.
-        """
+        """Retrieve books filtered by category."""
         db = get_db()
         query = '''SELECT id, title, author, category, publisher, year, language, isbn,
                           description, cover_url, total_copies, available_copies, 
@@ -191,14 +152,7 @@ class Book:
     
     @staticmethod
     def get_new_arrivals(limit: int = 10) -> List['Book']:
-        """Retrieve newest books sorted by publication year.
-        
-        Args:
-            limit: Maximum number of books to return.
-            
-        Returns:
-            List of newest Book instances.
-        """
+        """Retrieve newest books sorted by publication year."""
         db = get_db()
         rows = db.execute('''
             SELECT id, title, author, category, publisher, year, language, isbn,
@@ -210,14 +164,7 @@ class Book:
     
     @staticmethod
     def get_most_borrowed(limit: int = 10) -> List['Book']:
-        """Retrieve most popular books by borrow count.
-        
-        Args:
-            limit: Maximum number of books to return.
-            
-        Returns:
-            List of most borrowed Book instances.
-        """
+        """Retrieve most popular books by borrow count."""
         db = get_db()
         rows = db.execute('''
             SELECT id, title, author, category, publisher, year, language, isbn,
@@ -229,14 +176,7 @@ class Book:
     
     @staticmethod
     def get_top_rated(limit: int = 10) -> List['Book']:
-        """Retrieve highest rated books.
-        
-        Args:
-            limit: Maximum number of books to return.
-            
-        Returns:
-            List of top-rated Book instances.
-        """
+        """Retrieve highest rated books."""
         db = get_db()
         rows = db.execute('''
             SELECT id, title, author, category, publisher, year, language, isbn,
@@ -248,11 +188,7 @@ class Book:
     
     @staticmethod
     def get_all_categories() -> List[str]:
-        """Retrieve all unique book categories.
-        
-        Returns:
-            Sorted list of category names.
-        """
+        """Retrieve all unique book categories."""
         db = get_db()
         rows = db.execute(
             'SELECT DISTINCT category FROM books ORDER BY category'
@@ -266,10 +202,6 @@ class Book:
         
         Args:
             change: Amount to change (positive or negative).
-            
-        Example:
-            >>> book.update_available_copies(-1)  # Borrowed
-            >>> book.update_available_copies(1)   # Returned
         """
         self.available_copies += change
         if self.available_copies < 0:
@@ -285,10 +217,7 @@ class Book:
         db.commit()
     
     def increment_borrow_count(self) -> None:
-        """Increment the borrow count by 1.
-        
-        Called when a book is successfully borrowed.
-        """
+        """Increment the borrow count by 1."""
         self.borrow_count += 1
         db = get_db()
         db.execute(
@@ -298,10 +227,7 @@ class Book:
         db.commit()
     
     def update_rating(self) -> None:
-        """Recalculate and update average rating from all reviews.
-        
-        Fetches all reviews for this book and updates the rating field.
-        """
+        """Recalculate and update average rating from all reviews."""
         db = get_db()
         row = db.execute(
             'SELECT AVG(rating) as avg_rating FROM reviews WHERE book_id = ?',
@@ -320,24 +246,7 @@ class Book:
     def create(title: str, author: str, category: str, publisher: str,
                year: int, language: str, isbn: str, description: str,
                cover_url: str, total_copies: int, shelf_location: str) -> Optional['Book']:
-        """Create a new book in the database.
-        
-        Args:
-            title: Book title.
-            author: Author name.
-            category: Book category.
-            publisher: Publisher name.
-            year: Publication year.
-            language: Book language.
-            isbn: ISBN number.
-            description: Book description.
-            cover_url: Cover image URL/path.
-            total_copies: Total number of copies.
-            shelf_location: Physical shelf location.
-            
-        Returns:
-            New Book instance if successful, None otherwise.
-        """
+        """Create a new book in the database."""
         import uuid
         db = get_db()
         
@@ -359,20 +268,13 @@ class Book:
             return None
     
     def delete(self) -> None:
-        """Delete this book from the database.
-        
-        Warning: This will permanently remove the book record.
-        """
+        """Delete this book from the database."""
         db = get_db()
         db.execute('DELETE FROM books WHERE id = ?', (self.id,))
         db.commit()
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert book to dictionary representation.
-        
-        Returns:
-            Dictionary containing all book attributes.
-        """
+        """Convert book to dictionary representation."""
         return {
             'id': self.id,
             'title': self.title,
@@ -391,31 +293,82 @@ class Book:
             'borrow_count': self.borrow_count
         }
     
-    # ==================== SERVICE METHODS (Merged from BookService) ====================
-    
     @staticmethod
     def get_total_count() -> int:
-        """Get total number of books in catalog.
-        
-        Returns:
-            Total book count.
-        """
+        """Get total number of books in catalog."""
         db = get_db()
         row = db.execute('SELECT COUNT(*) as count FROM books').fetchone()
         return row['count']
     
-    def update_fields(self, **kwargs) -> tuple:
+    def update_fields(self, **kwargs) -> Tuple[bool, str]:
         """Update book information.
         
+        REFACTORED: Intercepts manual 'available_copies' updates to respect
+        the 'Hidden Inventory' logic.
+        
+        If an Admin manually increases copies (e.g., from 0 to 5):
+        1. Checks for waiting reservations.
+        2. Automatically assigns new copies to reservations (Hidden Pool).
+        3. Only the remaining copies become Public.
+        
         Args:
-            **kwargs: Fields to update (title, author, etc.).
+            **kwargs: Fields to update (title, author, available_copies, etc.).
             
         Returns:
             Tuple of (success: bool, message: str).
         """
         db = get_db()
         
-        # Build update query dynamically
+        # ========== CRITICAL: INTERCEPT MANUAL INVENTORY UPDATE ==========
+        if 'available_copies' in kwargs:
+            try:
+                target_copies = int(kwargs['available_copies'])
+                current_copies = self.available_copies
+                added_copies = target_copies - current_copies
+                
+                # Only if we are ADDING copies, we check reservations
+                if added_copies > 0:
+                    from models.reservation import Reservation
+                    from models.system_log import SystemLog
+                    
+                    # Try to absorb these new copies into reservations
+                    copies_absorbed_by_reservations = 0
+                    
+                    for _ in range(added_copies):
+                        # Get next waiting person
+                        next_res = Reservation.get_next_in_queue(self.id)
+                        
+                        if next_res:
+                            # Assign copy to this person (Hidden Inventory)
+                            success, _ = next_res.mark_ready(hold_hours=48)
+                            if success:
+                                copies_absorbed_by_reservations += 1
+                        else:
+                            # No more reservations waiting
+                            break
+                    
+                    if copies_absorbed_by_reservations > 0:
+                        # Logic:
+                        # Admin wanted to set Total = 5 (Target)
+                        # Current was 0. Added = 5.
+                        # Absorbed = 2 (assigned to reservers).
+                        # New Public Count should be: Target - Absorbed = 3.
+                        
+                        kwargs['available_copies'] = target_copies - copies_absorbed_by_reservations
+                        
+                        # Log this automatic action
+                        SystemLog.add(
+                            'Inventory Update Intercepted',
+                            f'Admin added {added_copies} copies. System automatically assigned '
+                            f'{copies_absorbed_by_reservations} copies to waiting reservations. '
+                            f'Public inventory set to {kwargs["available_copies"]}.',
+                            'system',
+                            None # Or current user ID if available in context
+                        )
+            except ValueError:
+                return False, "Invalid number for available copies"
+
+        # ========== STANDARD UPDATE LOGIC ==========
         fields = []
         values = []
         

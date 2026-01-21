@@ -1,10 +1,4 @@
 """Library Management System - Flask Application.
-
-Refactored with Clean Architecture:
-- Blueprints for route organization
-- Extensions module to prevent circular imports
-- PEP 8 compliance with type hints
-- English comments and docstrings
 """
 import atexit
 from flask import Flask, g, session
