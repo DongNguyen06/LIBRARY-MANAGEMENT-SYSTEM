@@ -14,11 +14,7 @@ admin_bp = Blueprint('admin', __name__)
 @login_required
 @role_required('admin')
 def dashboard():
-    """Display admin dashboard with system statistics and logs.
-    
-    Returns:
-        Rendered admin dashboard template.
-    """
+    """Display admin dashboard with system statistics and logs."""
     admin = Admin.get_by_id(session['user_id'])
     
     return render_template(
@@ -26,7 +22,7 @@ def dashboard():
         stats=admin.get_stats(),
         config=SystemConfig.get(),
         logs=SystemLog.get_recent(50),
-        trends=[]  # Can be populated with actual trend data
+        trends=[]
     )
 
 
@@ -36,14 +32,7 @@ def dashboard():
 def save_config():
     """Save system configuration settings.
     
-    Form data:
-        max_borrowed_books: Maximum books per user.
-        borrow_duration: Default borrow period in days.
-        reservation_hold_time: Reservation hold time in days.
-        renewal_limit: Maximum number of renewals allowed.
-    
-    Returns:
-        Redirect to admin dashboard with status message.
+    Now includes 'late_fee_per_day' to allow dynamic fine adjustment.
     """
     admin = Admin.get_by_id(session['user_id'])
     
@@ -51,7 +40,8 @@ def save_config():
         'max_borrowed_books': int(request.form.get('max_borrowed_books', 3)),
         'borrow_duration': int(request.form.get('borrow_duration', 14)),
         'reservation_hold_time': int(request.form.get('reservation_hold_time', 3)),
-        'renewal_limit': int(request.form.get('renewal_limit', 2))
+        'renewal_limit': int(request.form.get('renewal_limit', 2)),
+        'late_fee_per_day': float(request.form.get('late_fee_per_day', 1000.0))
     }
     
     success, message = admin.save_system_config(config_data)
@@ -63,14 +53,7 @@ def save_config():
 @login_required
 @role_required('admin')
 def clear_logs():
-    """Clear old system logs.
-    
-    Form data:
-        days: Number of days of logs to keep (delete older).
-    
-    Returns:
-        Redirect to admin dashboard with status message.
-    """
+    """Clear old system logs."""
     admin = Admin.get_by_id(session['user_id'])
     days = int(request.form.get('days', 30))
     
@@ -83,29 +66,17 @@ def clear_logs():
 @login_required
 @role_required('admin')
 def send_notifications():
-    """Display notification sending page for admin.
-    
-    Now supports saving notification templates
-    
-    Returns:
-        Rendered notification sending template.
-    """
+    """Display notification sending page for admin."""
     return render_template('pages/admin/send_notifications.html')
 
 
-# Add support for notification templates
 @admin_bp.route('/notification-templates', methods=['GET'])
 @login_required
 @role_required('admin')
 def list_notification_templates():
-    """Get list of notification templates.
-    
-    Returns:
-        JSON list of templates
-    """
+    """Get list of notification templates."""
     from flask import jsonify
     
-    #  Define built-in templates
     templates = [
         {
             'id': 'overdue_reminder',
@@ -154,21 +125,14 @@ def list_notification_templates():
 @login_required
 @role_required('admin')
 def export_logs():
-    """Export system logs to CSV file.
-    
-    Returns:
-        CSV file download response containing system logs.
-    """
+    """Export system logs to CSV file."""
     logs = SystemLog.get_recent(1000)
     
-    # Create CSV in memory
     si = StringIO()
     writer = csv.writer(si)
     
-    # Write header
     writer.writerow(['Timestamp', 'Action', 'Details', 'Type', 'User ID'])
     
-    # Write log data
     for log in logs:
         writer.writerow([
             log['timestamp'],
@@ -178,7 +142,6 @@ def export_logs():
             log.get('user_id', '')
         ])
     
-    # Create response with CSV data
     output = make_response(si.getvalue())
     output.headers["Content-Disposition"] = "attachment; filename=system_logs.csv"
     output.headers["Content-type"] = "text/csv"

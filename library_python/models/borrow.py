@@ -4,7 +4,7 @@ import uuid
 from config.config import Config
 from models.book import Book
 from models.database import get_db
-
+from models.system_config import SystemConfig
 
 class Borrow:
     
@@ -12,7 +12,10 @@ class Borrow:
     def get_expired_pickups_details(hours=48):
         """Get details of expired pending pickups for notification."""
         db = get_db()
-        limit_time = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
+        hold_days = SystemConfig.get_int('reservation_hold_time', 2)
+        hold_hours = hold_days * 24
+        
+        limit_time = (datetime.now() - timedelta(hours=hold_hours)).strftime('%Y-%m-%d %H:%M:%S')
         return db.execute('''
             SELECT b.user_id, bk.title 
             FROM borrows b
@@ -63,7 +66,7 @@ class Borrow:
         
         grace_minutes = Config.GRACE_PERIOD_MINUTES
         hourly_rate = Config.LATE_FEE_HOURLY
-        daily_rate = Config.LATE_FEE_DAILY
+        daily_rate = SystemConfig.get_float('late_fee_per_day', Config.LATE_FEE_DAILY)
         
         if total_minutes <= grace_minutes:
             return 0.0
@@ -106,8 +109,12 @@ class Borrow:
         
         # ========== VALIDATION 2: Check user borrow limit ==========
         active_borrows = Borrow.get_active_borrows(user_id)
-        if len(active_borrows) >= Config.MAX_BORROW_LIMIT:
-            return None, f"You have reached the maximum borrow limit of {Config.MAX_BORROW_LIMIT} books"
+        
+        # [DYNAMIC] Get Max Limit from DB
+        max_limit = SystemConfig.get_int('max_borrowed_books', Config.MAX_BORROW_LIMIT)
+        
+        if len(active_borrows) >= max_limit:
+            return None, f"You have reached the maximum borrow limit of {max_limit} books"
         
         # ========== VALIDATION 3: Check duplicate requests ==========
         for borrow in active_borrows:
@@ -121,12 +128,10 @@ class Borrow:
             return None, f"Please pay your outstanding fine of {user.fines:,.0f} VND before borrowing"
         
         # ========== CRITICAL: HIDDEN INVENTORY CHECK ==========
-        # Check if user has a READY reservation (priority access to hidden inventory)
         user_reservation = Reservation.get_user_book_reservation(user_id, book_id)
         has_priority_access = False
         
         if user_reservation and user_reservation.status == 'ready':
-            # Verify reservation hasn't expired
             if user_reservation.hold_until:
                 hold_deadline = datetime.strptime(
                     user_reservation.hold_until, '%Y-%m-%d %H:%M:%S'
@@ -134,23 +139,25 @@ class Borrow:
                 if datetime.now() <= hold_deadline:
                     has_priority_access = True
                 else:
-                    # Expired reservation - auto-cancel and requeue
                     user_reservation.cancel()
                     return None, "Your reservation has expired. Please reserve again."
         
         # ========== INVENTORY AVAILABILITY CHECK ==========
         if not has_priority_access:
-            # Public user - must check physical availability
             if book.available_copies <= 0:
                 return None, "Book is not available. Please reserve it instead."
-        # else: Priority user can proceed even if available_copies = 0 (hidden inventory)
         
         # ========== CREATE BORROW RECORD ==========
         borrow_id = str(uuid.uuid4())
         now = datetime.now()
         borrow_date = now.strftime('%Y-%m-%d %H:%M:%S')
-        pending_until = (now + timedelta(hours=Config.PENDING_PICKUP_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
-        estimated_due_date = (now + timedelta(days=Config.BORROW_DURATION_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+        
+        # [DYNAMIC] Get durations from DB
+        hold_days = SystemConfig.get_int('reservation_hold_time', 2)
+        borrow_days = SystemConfig.get_int('borrow_duration', Config.BORROW_DURATION_DAYS)
+        
+        pending_until = (now + timedelta(days=hold_days)).strftime('%Y-%m-%d %H:%M:%S')
+        estimated_due_date = (now + timedelta(days=borrow_days)).strftime('%Y-%m-%d %H:%M:%S')
         
         try:
             db.execute('''
@@ -162,11 +169,7 @@ class Borrow:
             
             # ========== CRITICAL: INVENTORY MANAGEMENT ==========
             if has_priority_access:
-                # Priority user claiming hidden inventory
-                # DO NOT decrease available_copies (already at 0 from hidden pool)
-                # Mark reservation as completed
                 user_reservation.complete()
-                
                 from models.system_log import SystemLog
                 SystemLog.add(
                     'Priority Borrow Created',
@@ -175,7 +178,6 @@ class Borrow:
                     user_id
                 )
             else:
-                # Public user - decrease public inventory
                 book.update_available_copies(-1)
                 
             book.increment_borrow_count()
@@ -191,7 +193,7 @@ class Borrow:
                     user_id
                 )
             
-            return Borrow.get_by_id(borrow_id), f"Book reserved! Please pick it up within 48 hours (by {pending_until})"
+            return Borrow.get_by_id(borrow_id), f"Book reserved! Please pick it up within {hold_days * 24} hours (by {pending_until})"
             
         except Exception as e:
             db.rollback()
@@ -199,12 +201,7 @@ class Borrow:
             return None, f"Failed to create borrow request: {str(e)}"
 
     def return_book(self, condition='good', book_value=0.0) -> Tuple[bool, str]:
-        """Return borrowed book with HIDDEN INVENTORY support.
-        
-        REFACTORED: Implements reservation priority system
-        - If reservations exist: Book goes to hidden pool (no inventory increase)
-        - If no reservations: Return to public inventory
-        """
+        """Return borrowed book with HIDDEN INVENTORY support."""
         if self.status != 'borrowed':
             return False, "Only borrowed books can be returned"
 
@@ -241,37 +238,35 @@ class Borrow:
 
         # Check for active reservations
         if Reservation.has_active_reservations(self.book_id):
-            # Book goes to HIDDEN POOL - do NOT increase public inventory
+            # Book goes to HIDDEN POOL
             next_reservation = Reservation.get_next_in_queue(self.book_id)
             
+            # [DYNAMIC] Get Hold Time
+            hold_days = SystemConfig.get_int('reservation_hold_time', 2)
+            
             if next_reservation:
-                # Notify next person in queue
-                success, msg = next_reservation.mark_ready(hold_hours=Config.RESERVATION_HOLD_HOURS)
+                success, msg = next_reservation.mark_ready(hold_hours=hold_days * 24)
                 
                 if success:
                     SystemLog.add(
                         'Book to Hidden Pool',
-                        f'"{book.title}" returned to hidden pool for reservation queue. '
-                        f'Next in queue notified. Available copies NOT increased.',
+                        f'"{book.title}" returned to hidden pool. Next in queue notified.',
                         'info',
                         self.user_id
                     )
                 else:
-                    # If notification fails, return to public pool as fallback
                     book.update_available_copies(1)
                     SystemLog.add(
                         'Reservation Notification Failed',
-                        f'Failed to notify next reserver for "{book.title}". '
-                        f'Book returned to public inventory. Error: {msg}',
+                        f'Failed to notify. Book returned to public pool. Error: {msg}',
                         'warning',
                         self.user_id
                     )
         else:
-            # No reservations - return to PUBLIC INVENTORY
             book.update_available_copies(1)
             SystemLog.add(
                 'Book to Public Pool',
-                f'"{book.title}" returned to public inventory. No reservations pending.',
+                f'"{book.title}" returned to public inventory.',
                 'info',
                 self.user_id
             )
@@ -283,7 +278,7 @@ class Borrow:
             if user:
                 user.add_fine(total_fine)
                 user.add_violation()
-                fine_reason = f"Return fees (Late: {self.late_fee:,.0f} VND, Damage: {self.damage_fee:,.0f} VND)"
+                fine_reason = f"Return fees (Late: {self.late_fee:,.0f}, Damage: {self.damage_fee:,.0f})"
                 Fine.create(self.user_id, total_fine, fine_reason, self.id)
 
         db.commit()
@@ -291,24 +286,22 @@ class Borrow:
         # Log return
         user = User.get_by_id(self.user_id)
         if user and book:
-            details = f'{user.name} returned "{book.title}" (Condition: {condition}'
-            if total_fine > 0:
-                details += f', Total Fine: {total_fine:,.0f} VND'
-            details += ')'
-            SystemLog.add('Book Returned', details, 'info', self.user_id)
+            SystemLog.add('Book Returned', f'{user.name} returned "{book.title}"', 'info', self.user_id)
 
         message = f"Book returned successfully"
         if total_fine > 0:
-            message += f". Late fee: {self.late_fee:,.0f} VND, Damage fee: {self.damage_fee:,.0f} VND"
+            message += f". Total fees: {total_fine:,.0f} VND"
         return True, message
 
-    def renew(self, extension_days=7) -> Tuple[bool, str]:
+    def renew(self, extension_days=None) -> Tuple[bool, str]:
         """Renew borrowed book with proper business rules."""
         if self.status != 'borrowed':
             return False, "Only borrowed books can be renewed"
 
-        if self.renewed_count >= 1:
-            return False, "Maximum renewal limit (1 time) has been reached"
+        # [DYNAMIC] Get renewal limit
+        limit = SystemConfig.get_int('renewal_limit', Config.MAX_RENEWAL_COUNT)
+        if self.renewed_count >= limit:
+            return False, f"Maximum renewal limit ({limit} times) reached"
 
         due_timestamp = datetime.strptime(self.due_date, '%Y-%m-%d %H:%M:%S')
         if datetime.now() > due_timestamp:
@@ -317,6 +310,9 @@ class Borrow:
         from models.reservation import Reservation
         if Reservation.has_active_reservations(self.book_id):
             return False, "Cannot renew: Someone has reserved this book"
+
+        if extension_days is None:
+            extension_days = Config.RENEWAL_EXTENSION_DAYS
 
         new_due_timestamp = due_timestamp + timedelta(days=extension_days)
         self.due_date = new_due_timestamp.strftime('%Y-%m-%d %H:%M:%S')
@@ -335,7 +331,7 @@ class Borrow:
         if user and book:
             SystemLog.add(
                 'Book Renewal',
-                f'{user.name} renewed "{book.title}" (New due: {self.due_date})',
+                f'{user.name} renewed "{book.title}"',
                 'info',
                 self.user_id
             )
@@ -343,14 +339,7 @@ class Borrow:
         return True, f"Book renewed successfully. New due date: {self.due_date}"
     
     def cancel(self) -> Tuple[bool, str]:
-        """Cancel borrow request and handle inventory safely.
-        
-        FIXED LOGIC (Double Counting Bug):
-        - Old logic: Always +1 to available_copies.
-        - New logic: 
-            1. If there are reservations waiting: Pass book to next reserver (Available copies stays +0).
-            2. If no reservations: Return book to public inventory (Available copies +1).
-        """
+        """Cancel borrow request and handle inventory safely."""
         if self.status not in ['pending_pickup']:
             return False, "Only pending pickup requests can be cancelled"
 
@@ -359,66 +348,34 @@ class Borrow:
         
         db = get_db()
         
-        # 1. Mark borrow request as cancelled
         self.status = 'cancelled'
-        db.execute(
-            'UPDATE borrows SET status = ? WHERE id = ?',
-            ('cancelled', self.id)
-        )
+        db.execute('UPDATE borrows SET status = ? WHERE id = ?', ('cancelled', self.id))
 
         book = Book.get_by_id(self.book_id)
         if not book:
             db.rollback()
-            return False, "Book associated with this borrow request not found"
+            return False, "Book not found"
 
-        # 2. [CRITICAL] Check if there are reservations waiting
-        # Instead of returning to public inventory, prioritize passing to reserver.
-        
         next_reservation = Reservation.get_next_in_queue(self.book_id)
         
         if next_reservation:
-            # === CASE 1: RESERVATION EXISTS ===
-            # Transfer borrow right to next person (User B)
-            # DO NOT increase available_copies (Book remains in "Hidden Inventory")
-            
-            success, msg = next_reservation.mark_ready(hold_hours=48)
+
+            hold_days = SystemConfig.get_int('reservation_hold_time', 2)
+            success, msg = next_reservation.mark_ready(hold_hours=hold_days * 24)
             
             if success:
-                SystemLog.add(
-                    'Borrow Cancelled - Cascaded',
-                    f'Borrow request cancelled by {self.user_id}. Book transferred directly to reservation #{next_reservation.id}. Inventory NOT increased.',
-                    'info',
-                    self.user_id
-                )
+                SystemLog.add('Borrow Cancelled - Cascaded', f'Book passed to next reserver.', 'info', self.user_id)
             else:
-                # If reservation activation fails -> Return to public inventory
                 book.update_available_copies(1)
-                SystemLog.add(
-                    'Borrow Cancelled - Cascade Failed',
-                    f'Borrow cancelled but failed to notify reserver. Book returned to public.',
-                    'warning',
-                    self.user_id
-                )
         else:
-            # === CASE 2: NO RESERVATIONS ===
-            # Return book to public inventory normally (+1)
             book.update_available_copies(1)
-            SystemLog.add(
-                'Borrow Cancelled - Returned to Public',
-                f'Borrow request cancelled. No reservations pending. Book returned to public inventory (+1).',
-                'info',
-                self.user_id
-            )
+            SystemLog.add('Borrow Cancelled', f'Book returned to public.', 'info', self.user_id)
 
-        # Handle reservation queue updates (if needed)
-        
         db.commit()
-
         return True, "Borrow request cancelled successfully"
 
     @staticmethod
     def auto_cancel_expired_pickups():
-        """Auto-cancel all pickup requests that exceeded 48-hour deadline."""
         db = get_db()
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
@@ -479,7 +436,8 @@ class Borrow:
     
     def get_fine_amount(self):
         overdue_days = self.get_overdue_days()
-        return overdue_days * Config.FINE_PER_DAY
+        daily_rate = SystemConfig.get_float('late_fee_per_day', Config.LATE_FEE_DAILY)
+        return overdue_days * daily_rate
     
     def get_user(self):
         from models.user import User
@@ -621,9 +579,9 @@ class Borrow:
         db = get_db()
         now = datetime.now()
         self.status = 'borrowed'
-        self.due_date = (
-            now + timedelta(days=Config.BORROW_DURATION_DAYS)
-        ).strftime('%Y-%m-%d %H:%M:%S')
+        
+        borrow_days = SystemConfig.get_int('borrow_duration', Config.BORROW_DURATION_DAYS)
+        self.due_date = (now + timedelta(days=borrow_days)).strftime('%Y-%m-%d %H:%M:%S')
 
         db.execute('''
             UPDATE borrows
@@ -637,11 +595,6 @@ class Borrow:
         user = User.get_by_id(self.user_id)
         book = Book.get_by_id(self.book_id)
         if user and book:
-            SystemLog.add(
-                'Book Pickup Confirmed',
-                f'{user.name} picked up "{book.title}" (Due: {self.due_date})',
-                'info',
-                self.user_id
-            )
+            SystemLog.add('Book Pickup Confirmed', f'{user.name} picked up "{book.title}"', 'info', self.user_id)
 
-        return True, f"Book pickup confirmed! Please return by {self.due_date}"
+        return True, f"Book pickup confirmed! Due date: {self.due_date}"
