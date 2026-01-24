@@ -62,6 +62,13 @@ def profile():
         phone = request.form.get('phone')
         birthday = request.form.get('birthday')
         
+        # --- Validate Phone Number ---
+        # Check: Must be digits (isdigit) AND length must be exactly 10
+        if not phone or not phone.isdigit() or len(phone) != 10:
+            flash('Invalid phone number: Must be exactly 10 digits.', 'error')
+            return render_template('pages/user/profile.html', user=user)
+        # -----------------------------
+        
         success, message = user.update(name, phone, birthday)
         flash(message, 'success' if success else 'error')
         
@@ -143,12 +150,12 @@ def borrow_book(book_id):
     If the user has a 'ready' reservation, Borrow.create will detect it
     and allow borrowing even if available_copies is 0.
     """
-    # Gọi hàm create (đã chứa logic Hidden Inventory)
+    # Call create function (already contains Hidden Inventory logic)
     borrow, message = Borrow.create(g.user.id, book_id)
     
     if borrow:
         flash(message, 'success')
-        # Nếu đang ở trang reservations thì reload lại trang đó
+        # If currently on reservations page, reload it
         if 'reservations' in request.referrer:
             return redirect(url_for('user.reservations'))
         return redirect(url_for('user.borrowed_books'))
@@ -163,7 +170,7 @@ def cancel_reservation(reservation_id):
     """Cancel a reservation."""
     res = Reservation.get_by_id(reservation_id)
     
-    # Validation: Chỉ chủ sở hữu mới được hủy
+    # Validation: Only the owner can cancel
     if not res or res.user_id != g.user.id:
         flash('Reservation not found or access denied', 'error')
         return redirect(url_for('user.reservations'))

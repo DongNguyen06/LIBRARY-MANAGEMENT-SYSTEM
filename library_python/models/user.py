@@ -294,8 +294,8 @@ class User:
 
     def get_book_interaction_status(self, book_id: str, book_obj=None) -> dict:
         """
-        Kiểm tra toàn bộ trạng thái tương tác giữa User và Book.
-        Trả về dict chứa tất cả flags cần thiết cho template.
+        Check the entire interaction status between User and Book.
+        Return a dict containing all necessary flags for the template.
         """
         from models.borrow import Borrow
         from models.review import Review

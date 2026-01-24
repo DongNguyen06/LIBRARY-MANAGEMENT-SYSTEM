@@ -7,7 +7,6 @@
     <h1 class="text-3xl font-bold text-gray-900 mb-8">My Profile</h1>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <!-- Profile Info -->
         <div class="md:col-span-2">
             <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
                 <h2 class="text-xl font-semibold text-gray-900 mb-4">Personal Information</h2>
@@ -40,6 +39,12 @@
                                 type="tel"
                                 name="phone"
                                 value="{{ user.phone }}"
+                                maxlength="10"
+                                minlength="10"
+                                pattern="[0-9]{10}"
+                                required
+                                title="Phone number must be exactly 10 digits"
+                                oninput="this.value = this.value.replace(/[^0-9]/g, '')"
                                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -62,7 +67,6 @@
             </div>
         </div>
 
-        <!-- Account Summary -->
         <div>
             <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
                 <h2 class="text-xl font-semibold text-gray-900 mb-4">Account Summary</h2>
